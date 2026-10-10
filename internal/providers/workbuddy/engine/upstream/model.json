@@ -1,17 +1,17 @@
 {
   "glm-5.2": {
     "context_length": 1000000,
-    "max_output_tokens": 131072,
+    "max_output_tokens": 64000,
     "source": "seed"
   },
   "glm-5.1": {
     "context_length": 200000,
-    "max_output_tokens": 131072,
+    "max_output_tokens": 48000,
     "source": "seed"
   },
   "glm-5.3": {
     "context_length": 1000000,
-    "max_output_tokens": 131072,
+    "max_output_tokens": 64000,
     "source": "seed"
   },
   "glm-5.3-flash": {
@@ -21,22 +21,22 @@
   },
   "glm-5v-turbo": {
     "context_length": 200000,
-    "max_output_tokens": 131072,
+    "max_output_tokens": 64000,
     "source": "seed"
   },
   "kimi-k2.7": {
     "context_length": 256000,
-    "max_output_tokens": 65536,
+    "max_output_tokens": 32000,
     "source": "seed"
   },
   "kimi-k2.6": {
     "context_length": 256000,
-    "max_output_tokens": 262144,
+    "max_output_tokens": 32000,
     "source": "seed"
   },
   "kimi-k2.5": {
     "context_length": 164000,
-    "max_output_tokens": 262144,
+    "max_output_tokens": 32000,
     "source": "seed"
   },
   "kimi-k3": {
@@ -45,12 +45,13 @@
     "source": "seed"
   },
   "kimi-k2.8-preview": {
-    "context_length": 1048576,
+    "context_length": 1000000,
+    "max_output_tokens": 64000,
     "source": "seed"
   },
   "minimax-m3": {
     "context_length": 512000,
-    "max_output_tokens": 512000,
+    "max_output_tokens": 64000,
     "source": "seed"
   },
   "hy3": {
@@ -69,23 +70,23 @@
     "source": "seed"
   },
   "hy4-preview-x": {
-    "context_length": 1000000,
+    "context_length": 960000,
     "max_output_tokens": 64000,
     "source": "seed"
   },
   "deepseek-v4-pro": {
     "context_length": 1000000,
-    "max_output_tokens": 384000,
+    "max_output_tokens": 128000,
     "source": "seed"
   },
   "deepseek-v4-flash": {
     "context_length": 1000000,
-    "max_output_tokens": 384000,
+    "max_output_tokens": 50000,
     "source": "seed"
   },
   "deepseek-v4.1-flash": {
     "context_length": 1000000,
-    "max_output_tokens": 384000,
+    "max_output_tokens": 128000,
     "source": "seed"
   },
   "gpt-6-astra": {
@@ -129,7 +130,18 @@
     "source": "seed"
   },
   "auto": {
-    "context_length": 168000,
+    "context_length": 256000,
+    "max_output_tokens": 32000,
+    "source": "seed"
+  },
+  "kimi-k3-1": {
+    "context_length": 1000000,
+    "max_output_tokens": 32000,
+    "source": "seed"
+  },
+  "hy3-x": {
+    "context_length": 192000,
+    "max_output_tokens": 64000,
     "source": "seed"
   }
 }
