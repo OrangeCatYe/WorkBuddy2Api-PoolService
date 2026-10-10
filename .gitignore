@@ -25,3 +25,5 @@ config.json
 .vscode/
 *.swp
 .DS_Store
+
+*.tsbuildinfo
