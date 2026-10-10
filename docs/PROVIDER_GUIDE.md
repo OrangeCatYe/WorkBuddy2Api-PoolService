@@ -13,6 +13,8 @@ PoolService 用 Provider 适配器对接各类 AI 编程助手。不同平台的
 | `AccountOps` | 否 | 账号详情与批量操作按钮 |
 | `TaskCapable` | 否 | 任务页的任务卡片；账号页批量栏的「执行任务」菜单 |
 | `SettingsCapable` | 否 | 设置页的平台参数标签页 |
+| `QuestCapable` | 否 | 账号详情的「成长任务」页签（查看进度、自动完成、领奖） |
+| `TaskHistoryAware` | 否 | 注入执行记录器，任务页显示每次执行的逐账号结果 |
 | `RoutingTunable` | 否 | 积分中心的选号策略对该平台生效 |
 | `Starter` | 否 | 启动 / 停止后台协程（刷新、持久化） |
 
@@ -48,6 +50,14 @@ Provider 直接向 `w` 写出 OpenAI Chat Completions 格式（SSE 或 JSON）�
 ## 5. 任务
 
 `RunTask(ctx, taskID, accountIDs)`：`accountIDs` 为空表示全部账号，非空时只处理这些账号（面板在账号页勾选后从批量栏触发）。指定账号时建议同时处理已禁用的账号，因为是用户明确选中的。
+
+### 执行记录
+
+实现 `TaskHistoryAware` 后，核心层会注入 `*taskrun.Recorder`。每次执行（定时或手动）调用 `Begin` 开一条记录，逐账号 `Add` 结果（状态 `ok / skipped / error`、说明、奖励），最后 `End`。记录先在内存里实时更新，结束后按天写入 `data/task-runs/`，保留 30 天。同一任务有执行中的记录时，`RunTask` 应拒绝再次触发。
+
+### 账号级任务
+
+`QuestCapable` 用于平台自带的任务体系（如 WorkBuddy 成长任务）：`Quests` 列出任务与进度，`StartQuests` 异步自动完成并返回执行记录 ID（面板据此轮询），`ClaimQuest` 领奖，`AcceptQuests` 批量接受。
 
 ## 6. 平台参数
 
