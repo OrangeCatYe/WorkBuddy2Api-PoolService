@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/types.ts","./src/components/appshell.tsx","./src/components/logingate.tsx","./src/components/ui.tsx","./src/lib/api.ts","./src/lib/format.ts","./src/lib/queries.ts","./src/lib/theme.ts","./src/pages/accounts.tsx","./src/pages/models.tsx","./src/pages/overview.tsx","./src/pages/placeholder.tsx"],"version":"5.6.3"}

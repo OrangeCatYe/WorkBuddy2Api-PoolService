@@ -146,7 +146,7 @@ func (a *API) accounts(w http.ResponseWriter, r *http.Request) {
 func (a *API) models(w http.ResponseWriter, r *http.Request) {
 	entries := a.catalog.Entries(r.Context())
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"models": gateway.ModelEntries(entries, "both"),
+		"models": gateway.ModelEntries(entries, "short"),
 		"errors": a.catalog.Errors(),
 	})
 }
