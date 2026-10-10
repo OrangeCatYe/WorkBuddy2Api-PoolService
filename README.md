@@ -2,7 +2,90 @@
 
 多平台 AI 编程助手账号池网关：把 WorkBuddy / CodeBuddy 等软件的账号聚合成统一的 OpenAI 兼容 API，供 ttswitch 等 Agent 路由工具接入，并提供积分中心与 Web 管理面板。
 
+> 基于 [workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)（MIT）重构，仅限管理本人账号使用，请遵守各平台服务协议。
+
+## 功能
+
+- **多平台框架**：平台以适配器接入，登录方式、账号操作、定时任务由适配器声明，面板自动渲染。当前支持 WorkBuddy（国内版 / 国际版）。
+- **OpenAI 兼容网关**：`/v1/models`、`/v1/chat/completions`；模型能力字段与 ttswitch 对齐，思考强度五档自动映射。
+- **模型名显示积分倍率**：可选在模型名后附加倍率，如 `glm-5.2(x0.05)`，在 Agent 里直接看到成本。
+- **账号池**：沿用原项目的冷却、熔断、会话粘性、快过期积分优先等策略；签到、保活、猫猫旅行等定时任务。
+- **Web 面板**：概览、账号（批量操作、积分包到期）、模型目录、任务、设置；明暗主题。
+
+## 快速开始
+
+从 Release 下载对应平台的二进制，或自行构建：
+
+```bash
+# Windows
+powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+# Linux
+scripts/build.sh
+```
+
+首次运行自动生成 `config.json`，并在日志中打印面板管理密钥：
+
+```bash
+./bin/poolsvc -config config.json
+# 面板: http://127.0.0.1:7863
+```
+
+在面板「账号 → 添加账号」中选择「国内版授权」，在弹出的页面完成登录，账号即自动加入池中。
+
+## 配置
+
+```jsonc
+{
+  "listen": "127.0.0.1:7863",
+  "data_dir": "./data",
+  "admin_key": "adm-...",                 // 面板密钥
+  "gateway": {
+    "legacy_api_key": "sk-...",           // 下游 Agent 使用的 API Key
+    "model_naming": "short",              // short / full / both
+    "credit_in_model_name": false         // 模型名附加积分倍率
+  },
+  "providers": {
+    "workbuddy": {
+      "enabled": true,
+      "auth_dir": "",                     // 空 = data/workbuddy/auths
+      "pool": { "credit_floor": 100 },
+      "schedule": { "checkin_hours": [9, 21] }
+      // 其余字段与原 workbuddy2api-panel 的 config.json 同名同义
+    }
+  }
+}
+```
+
+环境变量 `POOLSVC_LISTEN`、`POOLSVC_DATA_DIR`、`POOLSVC_ADMIN_KEY` 可覆盖对应字段。
+
+## 接入 ttswitch
+
+在 ttswitch 中新增「自定义 OpenAI 兼容供应商」：
+
+| 项 | 值 |
+|---|---|
+| Base URL | `http://127.0.0.1:7863/v1` |
+| API Key | `gateway.legacy_api_key` |
+| API 格式 | Chat Completions |
+
+拉取模型列表后，上下文长度、最大输出、图片输入、工具调用、思考档位会自动识别。思考强度按 ttswitch 的 `low / medium / high / xhigh / max` 发送，网关映射到模型实际支持的档位，并在响应头 `X-Reasoning-Effort-Applied` 中给出实际档位。
+
+## 从 workbuddy2api-panel 迁移
+
+1. 把旧项目的 `auths/` 目录复制到 `data/workbuddy/auths/`，或在配置中设置 `providers.workbuddy.auth_dir` 指向旧目录。
+2. 可选：把旧 `data/state.json` 复制到 `data/workbuddy/state.json`，保留冷却与统计状态。
+3. 旧 `config.json` 中的 `pool`、`schedule`、`upstream`、`global`、`prompt` 等段落原样放进 `providers.workbuddy`。
+4. 旧客户端使用的 `cn:glm-5.2` 这类模型名仍然可用。
+
+## 开发
+
+```bash
+npm --prefix web install
+npm --prefix web run dev          # 前端开发服务器，代理到 127.0.0.1:7863
+go test ./...
+```
+
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-
-> 本项目基于 [workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)（MIT）重构，仅限管理本人账号使用。
+- 新平台接入：[docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)
+- 变更记录：[CHANGELOG.md](CHANGELOG.md)

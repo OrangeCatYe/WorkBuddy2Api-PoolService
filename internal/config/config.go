@@ -55,6 +55,9 @@ type GatewayConfig struct {
 	// ModelNaming /v1/models 输出风格：short（短名，默认）/ full（provider/model）/ both
 	ModelNaming string   `json:"model_naming"`
 	CatalogTTL  Duration `json:"catalog_ttl"`
+	// CreditInModelName 模型 ID / 显示名末尾附加积分倍率，如 glm-5.2(x0.05)。
+	// 带后缀和不带后缀的名字都能请求；倍率变化后旧名仍可解析。
+	CreditInModelName bool `json:"credit_in_model_name"`
 	// LegacyAPIKey 兼容旧版单密钥；P3 起推荐改用下游 API Key 管理
 	LegacyAPIKey string `json:"legacy_api_key,omitempty"`
 	// AllowAnonymous 未配置任何下游 Key 时是否放行（默认 false：必须带 Key）
@@ -76,6 +79,16 @@ func Default() *Config {
 
 // Path 配置文件路径。
 func (c *Config) Path() string { return c.path }
+
+// Clone 深拷贝（Providers 原始 JSON 段逐个复制）。
+func (c *Config) Clone() *Config {
+	n := *c
+	n.Providers = make(map[string]json.RawMessage, len(c.Providers))
+	for k, v := range c.Providers {
+		n.Providers[k] = append(json.RawMessage(nil), v...)
+	}
+	return &n
+}
 
 // Load 读取配置；文件不存在时生成默认配置（含随机管理密钥）并落盘。
 func Load(path string) (*Config, bool, error) {

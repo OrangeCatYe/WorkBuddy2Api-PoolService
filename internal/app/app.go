@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,12 +18,14 @@ import (
 	"github.com/orangeruan/poolservice/internal/httpx"
 	"github.com/orangeruan/poolservice/internal/panelapi"
 	"github.com/orangeruan/poolservice/internal/providers/mock"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy"
 	"github.com/orangeruan/poolservice/internal/webui"
 )
 
 // App 应用实例。
 type App struct {
 	cfg     atomic.Pointer[config.Config]
+	cfgMu   sync.Mutex
 	reg     *provider.Registry
 	catalog *router.Catalog
 	server  *http.Server
@@ -36,6 +39,21 @@ type toggle struct {
 func New(cfg *config.Config) (*App, error) {
 	a := &App{reg: provider.NewRegistry()}
 	a.cfg.Store(cfg)
+
+	// WorkBuddy：未配置时按默认值启用（providers.workbuddy.enabled=false 关闭）。
+	wbs, err := workbuddy.ParseSettings(cfg.Providers[workbuddy.ID], cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	if wbs.Enabled {
+		wb, err := workbuddy.New(wbs)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.reg.Register(wb); err != nil {
+			return nil, err
+		}
+	}
 
 	var mk toggle
 	if err := cfg.ProviderConfig("mock", &mk); err != nil {
@@ -54,7 +72,7 @@ func New(cfg *config.Config) (*App, error) {
 	gateway.New(current, a.reg, a.catalog, nil).Register(mux)
 
 	apiMux := http.NewServeMux()
-	panelapi.New(current, a.reg, a.catalog).Register(apiMux)
+	panelapi.New(current, a.updateConfig, a.reg, a.catalog).Register(apiMux)
 	mux.Handle("/api/", httpx.SecurityHeaders(apiMux))
 
 	mux.Handle("GET /panel/", http.RedirectHandler("/", http.StatusMovedPermanently))
@@ -64,6 +82,8 @@ func New(cfg *config.Config) (*App, error) {
 		Addr:              cfg.Listen,
 		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       300 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	return a, nil
 }
@@ -71,14 +91,34 @@ func New(cfg *config.Config) (*App, error) {
 // Registry 暴露注册表（测试与扩展用）。
 func (a *App) Registry() *provider.Registry { return a.reg }
 
+// updateConfig 复制当前配置 → 修改 → 落盘 → 原子替换；落盘失败不影响运行中配置。
+func (a *App) updateConfig(mut func(*config.Config)) error {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	next := a.cfg.Load().Clone()
+	mut(next)
+	if err := next.Save(); err != nil {
+		return err
+	}
+	a.cfg.Store(next)
+	return nil
+}
+
 // Run 启动 Provider 后台任务与 HTTP 服务，直到 ctx 取消。
+// 退出顺序：先优雅关闭 HTTP（等在途请求结束），再逆序停止 Provider 并落盘。
 func (a *App) Run(ctx context.Context) error {
+	var started []provider.Starter
+	defer func() {
+		for i := len(started) - 1; i >= 0; i-- {
+			started[i].Stop()
+		}
+	}()
 	for _, p := range a.reg.List() {
 		if s, ok := p.(provider.Starter); ok {
 			if err := s.Start(ctx); err != nil {
 				return fmt.Errorf("start provider %s: %w", p.Meta().ID, err)
 			}
-			defer s.Stop()
+			started = append(started, s)
 		}
 	}
 	errCh := make(chan error, 1)

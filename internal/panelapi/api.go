@@ -20,14 +20,15 @@ var Version = "dev"
 // API 面板接口。
 type API struct {
 	cfg     func() *config.Config
+	update  Updater
 	reg     *provider.Registry
 	catalog *router.Catalog
 	started time.Time
 }
 
 // New 创建。
-func New(cfg func() *config.Config, reg *provider.Registry, catalog *router.Catalog) *API {
-	return &API{cfg: cfg, reg: reg, catalog: catalog, started: time.Now()}
+func New(cfg func() *config.Config, update Updater, reg *provider.Registry, catalog *router.Catalog) *API {
+	return &API{cfg: cfg, update: update, reg: reg, catalog: catalog, started: time.Now()}
 }
 
 // Register 挂载路由。
@@ -37,6 +38,8 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/accounts", a.auth(a.accounts))
 	mux.HandleFunc("GET /api/models", a.auth(a.models))
 	mux.HandleFunc("POST /api/models/refresh", a.auth(a.refreshModels))
+	a.registerProviderRoutes(mux)
+	a.registerSettingsRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {
@@ -61,7 +64,8 @@ func (a *API) meta(w http.ResponseWriter, r *http.Request) {
 		"started_at": a.started,
 		"providers":  metas,
 		"gateway": map[string]any{
-			"model_naming": a.cfg().Gateway.ModelNaming,
+			"model_naming":         a.cfg().Gateway.ModelNaming,
+			"credit_in_model_name": a.cfg().Gateway.CreditInModelName,
 		},
 	})
 }
@@ -146,7 +150,7 @@ func (a *API) accounts(w http.ResponseWriter, r *http.Request) {
 func (a *API) models(w http.ResponseWriter, r *http.Request) {
 	entries := a.catalog.Entries(r.Context())
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"models": gateway.ModelEntries(entries, "short"),
+		"models": gateway.ModelEntries(entries, gateway.NamingOptions{Style: "short"}),
 		"errors": a.catalog.Errors(),
 	})
 }

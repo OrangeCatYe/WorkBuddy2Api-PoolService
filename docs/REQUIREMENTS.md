@@ -146,17 +146,20 @@ ttswitch 解析字段（含别名）与本项目输出：
 
 | 阶段 | 分支 | 内容 | 产出 |
 |---|---|---|---|
-| P0 | `main` | 需求、架构文档、仓库骨架 | 本文档 |
-| P1 | `feat/core-skeleton` | Go 模块、核心接口、配置、HTTP 骨架、前端骨架与 embed | 可启动的空壳 |
-| P2 | `feat/workbuddy-provider` | 迁入原项目协议层为 WorkBuddy 适配器，测试全部通过 | WorkBuddy 账号可用 |
-| P3 | `feat/gateway` | 统一网关、模型路由、ttswitch 契约、下游 API Key | ttswitch 可接入 |
-| P4 | `feat/credit-ledger` | 积分账本、指标、增强选号策略 | 积分中心 |
-| P5 | `feat/panel` | 面板全部视图 | 完整 UI |
-| P6 | `feat/automation` | 定时任务、任务中心迁移 | 功能对齐原项目 |
-| P7 | `chore/release` | 迁移工具、Docker、文档 | 可发布 |
+| P0 | `main` | 需求、架构文档、仓库骨架 | v0.0 ✅ |
+| P1 | `feat/core-skeleton` | Go 模块、核心接口、配置、HTTP 骨架、前端骨架与 embed | v0.1.0 ✅ |
+| P2 | `feat/workbuddy-provider` | 迁入原项目协议层为 WorkBuddy 适配器；添加账号、账号运维、任务、倍率模型名 | v0.2.0 ✅ |
+| P3 | `feat/gateway` | 多协议入口（`/v1/messages`、`/v1/responses`）、下游 API Key、请求日志 | v0.3.0 |
+| P4 | `feat/credit-ledger` | 积分账本、指标、增强选号策略 | v0.4.0 |
+| P5 | `feat/panel` | 积分中心、用量分析、请求日志、接入向导等其余视图 | v0.5.0 |
+| P6 | `feat/automation` | 成长任务中心迁移、任务执行记录 | v0.6.0 |
+| P7 | `chore/release` | GitHub Actions 发布 Windows / Linux 二进制、迁移工具 | v1.0.0 |
 
-## 7. 待确认问题
-1. 后续计划接入的软件有哪些（如 Cursor、Kiro、Trae、Qoder 等）？它们的登录方式（OAuth / Cookie / API Key）会影响登录抽象的设计。
-2. 是否需要额外提供 Anthropic `/v1/messages` 与 OpenAI `/v1/responses` 入口？ttswitch 自身能做协议转换，第一期只做 Chat Completions。
-3. 部署形态：仅本机 Windows 运行，还是也要 Docker / Linux 服务器？
-4. 模型 ID 是否沿用 `cn:` / `global:` 前缀？本方案默认输出短名，同时兼容旧前缀。
+Docker 镜像推迟到 v1.0 之后（本机开发环境不允许运行 Docker，无法验证）。
+
+## 7. 已确认决策（2026-10-10）
+1. 先接入 WorkBuddy。不同平台的接入方式差异大，框架只规定能力接口，登录方式由适配器自行声明（见 [PROVIDER_GUIDE.md](PROVIDER_GUIDE.md)）。
+2. 同时提供多种协议入口：OpenAI Chat Completions、Anthropic Messages、OpenAI Responses，满足不经 ttswitch 直接使用的场景（P3）。
+3. 发布到 GitHub，优先支持 Windows 与 Linux 单二进制；Docker 后续提供。
+4. 模型 ID 默认短名，兼容 `cn:` 旧前缀；新增开关 `gateway.credit_in_model_name`，开启后模型 ID 与显示名附加积分倍率（如 `glm-5.2(x0.05)`）。倍率会随限时优惠变化，网关解析时会剥离倍率后缀，客户端保存的旧名始终可用。
+5. 全程 git 管理：每阶段一个 `feat/*` 分支，`--no-ff` 合并回 `main` 并打版本标签。
