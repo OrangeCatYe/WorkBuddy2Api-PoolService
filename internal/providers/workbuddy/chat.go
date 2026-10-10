@@ -7,8 +7,11 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/orangeruan/poolservice/internal/core/provider"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/reqlog"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/server"
 )
 
 // hopHeaders 不应转发给 engine 的头（逐跳头 + 网关鉴权凭证）。
@@ -16,6 +19,7 @@ var hopHeaders = map[string]bool{
 	"Authorization": true, "X-Api-Key": true, "Content-Length": true,
 	"Connection": true, "Keep-Alive": true, "Transfer-Encoding": true,
 	"Upgrade": true, "Te": true, "Trailer": true, "Proxy-Authorization": true,
+	"Api-Key": true, "X-Poolsvc-Request-Id": true,
 }
 
 // engineModel 把目录 ID 转为 engine 路由协议：国际版保持 global: 前缀，CN 补 cn:。
@@ -52,17 +56,58 @@ func (p *Provider) ServeChat(ctx context.Context, req *provider.ChatRequest, w h
 		}
 	}
 	r.Header.Set("Content-Type", "application/json")
+	if req.RequestID != "" {
+		r.Header.Set(server.ExternalRequestIDHeader, req.RequestID)
+	}
 	r.ContentLength = int64(len(body))
 	if req.ClientIP != "" {
 		r.RemoteAddr = net.JoinHostPort(req.ClientIP, "0")
 	}
 
+	res := &engineResult{}
+	r = r.WithContext(context.WithValue(r.Context(), engineResultKey{}, res))
 	sw := &statusWriter{ResponseWriter: w}
 	p.handler.ServeHTTP(sw, r)
 	if sw.status == 0 {
 		sw.status = http.StatusOK
 	}
-	return provider.ChatOutcome{Status: sw.status, Attempts: 1}
+	out := provider.ChatOutcome{Status: sw.status, Attempts: 1}
+	if res.done {
+		ev := res.ev
+		out.AccountID = res.uid
+		if ev.Attempts > 0 {
+			out.Attempts = ev.Attempts
+		}
+		out.TTFB = time.Duration(ev.TTFBMs) * time.Millisecond
+		out.ErrorKind = ev.Outcome
+		if ev.Outcome == "success" {
+			out.ErrorKind = ""
+		}
+		if ev.TotalTokens > 0 || ev.PromptTokens > 0 {
+			out.HasUsage = true
+			out.Usage = provider.Usage{
+				PromptTokens: ev.PromptTokens, CompletionTokens: ev.CompletionTokens,
+				TotalTokens: ev.TotalTokens, CachedTokens: ev.CacheHitTokens,
+				Credit: ev.Credit, HasCredit: ev.HasCredit,
+			}
+		}
+	}
+	return out
+}
+
+type engineResultKey struct{}
+
+type engineResult struct {
+	done bool
+	ev   reqlog.Event
+	uid  string
+}
+
+// onEngineDone engine 请求结束回调（见 server.Config.OnRequestDone）。
+func onEngineDone(ctx context.Context, ev reqlog.Event, uid string) {
+	if res, ok := ctx.Value(engineResultKey{}).(*engineResult); ok {
+		res.done, res.ev, res.uid = true, ev, uid
+	}
 }
 
 // statusWriter 记录状态码并透传 Flush（engine 的 SSE 依赖 http.Flusher）。

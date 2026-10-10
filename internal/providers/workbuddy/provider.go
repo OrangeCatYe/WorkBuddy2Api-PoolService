@@ -169,6 +169,7 @@ func New(cfg Settings) (*Provider, error) {
 		PromptMode: cfg.Prompt.Mode, PromptText: cfg.promptText,
 		RecordClientInfo: cfg.Logging.RequestClientInfo,
 		GlobalEnabled:    cfg.Global.Enabled,
+		OnRequestDone:    onEngineDone,
 	})
 	return p, nil
 }

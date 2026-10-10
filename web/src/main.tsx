@@ -19,6 +19,9 @@ import { ModelsPage } from '@/pages/Models'
 import { Placeholder } from '@/pages/Placeholder'
 import { TasksPage } from '@/pages/Tasks'
 import { SettingsPage } from '@/pages/Settings'
+import { GatewayPage } from '@/pages/Gateway'
+import { LogsPage } from '@/pages/Logs'
+import { UsagePage } from '@/pages/Usage'
 import { ToastProvider } from '@/components/overlay'
 
 applyInitialTheme()
@@ -43,12 +46,9 @@ const router = createBrowserRouter([
         path: '/credits',
         element: <Placeholder phase="P4" title="积分中心" items={['积分包到期日历与浪费预警', '账号消耗速度与耗尽预测', '选号策略配置与决策回放']} />,
       },
-      {
-        path: '/gateway',
-        element: <Placeholder phase="P3" title="接入与密钥" items={['下游 API Key：模型白名单、预算、RPM', 'ttswitch 接入向导与配置一键复制']} />,
-      },
-      { path: '/usage', element: <Placeholder phase="P5" title="用量分析" items={['Token / 积分时序', '按账号、模型、Key 维度拆分']} /> },
-      { path: '/logs', element: <Placeholder phase="P5" title="请求日志" items={['请求记录筛选与详情', '运行日志分频道']} /> },
+      { path: '/gateway', element: <GatewayPage /> },
+      { path: '/usage', element: <UsagePage /> },
+      { path: '/logs', element: <LogsPage /> },
       { path: '/tasks', element: <TasksPage /> },
       { path: '/settings', element: <SettingsPage /> },
     ],

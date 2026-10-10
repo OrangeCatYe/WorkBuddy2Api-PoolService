@@ -146,8 +146,8 @@ export function AccountsPage() {
           <div className="rounded-xl border border-line bg-sunken px-4 py-2 text-[13px] text-muted">已选账号来自多个平台，请先切换到单个平台再批量操作。</div>
         ))}
 
-      <Card className="overflow-hidden">
-        <table className="w-full text-left">
+      <Card className="overflow-x-auto">
+        <table className="w-full min-w-[860px] text-left">
           <thead>
             <tr className="border-b border-line text-[12px] text-faint">
               <th className="w-10 py-3 pl-5">

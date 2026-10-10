@@ -1,4 +1,6 @@
-// Package gateway OpenAI 兼容网关入口。
+// Package gateway 统一 API 网关：OpenAI Chat Completions、Anthropic Messages、
+// OpenAI Responses 三种入口共用一条管线（鉴权 → 限额 → 模型解析 → 推理档位映射 →
+// Provider 转发 → 协议翻译 → 用量记录）。
 package gateway
 
 import (
@@ -17,7 +19,19 @@ import (
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
 	"github.com/orangeruan/poolservice/internal/httpx"
+	"github.com/orangeruan/poolservice/internal/store/keys"
+	"github.com/orangeruan/poolservice/internal/store/requests"
 )
+
+// 协议标识（请求日志 protocol 字段）。
+const (
+	ProtoChat      = "chat"
+	ProtoMessages  = "messages"
+	ProtoResponses = "responses"
+)
+
+// LegacyKeyID 配置文件中 gateway.legacy_api_key 的身份 ID。
+const LegacyKeyID = "legacy"
 
 // Gateway 网关。
 type Gateway struct {
@@ -25,6 +39,8 @@ type Gateway struct {
 	reg     *provider.Registry
 	catalog *router.Catalog
 	picker  provider.Picker
+	keys    *keys.Store
+	reqs    *requests.Recorder
 }
 
 // New 创建网关。
@@ -32,28 +48,71 @@ func New(cfg func() *config.Config, reg *provider.Registry, catalog *router.Cata
 	return &Gateway{cfg: cfg, reg: reg, catalog: catalog, picker: picker}
 }
 
+// SetKeys 注入下游 Key 存储（nil = 只接受配置文件中的 legacy_api_key）。
+func (g *Gateway) SetKeys(s *keys.Store) { g.keys = s }
+
+// SetRequests 注入请求日志记录器（nil = 只写进程日志）。
+func (g *Gateway) SetRequests(r *requests.Recorder) { g.reqs = r }
+
 // Register 挂载路由。
 func (g *Gateway) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /healthz", g.healthz)
-	mux.HandleFunc("GET /v1/models", g.auth(g.models))
-	mux.HandleFunc("POST /v1/chat/completions", g.auth(g.chat))
+	mux.HandleFunc("GET /v1/models", g.models)
+	mux.HandleFunc("POST /v1/chat/completions", g.chat)
+	mux.HandleFunc("POST /v1/messages", g.messages)
+	mux.HandleFunc("POST /v1/messages/count_tokens", g.countTokens)
+	mux.HandleFunc("POST /v1/responses", g.responses)
 }
 
-func (g *Gateway) auth(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		cfg := g.cfg()
-		key := cfg.Gateway.LegacyAPIKey
-		if key == "" && cfg.Gateway.AllowAnonymous {
-			next(w, r)
-			return
-		}
-		tok := httpx.BearerToken(r)
-		if tok == "" || key == "" || !httpx.SecretEqual(tok, key) {
-			httpx.WriteOpenAIError(w, http.StatusUnauthorized, "invalid_api_key", "invalid or missing API key", 0)
-			return
-		}
-		next(w, r)
+// errWriter 各协议的分发前错误格式。
+type errWriter func(w http.ResponseWriter, status int, code, msg string)
+
+func openAIErr(w http.ResponseWriter, status int, code, msg string) {
+	httpx.WriteOpenAIError(w, status, code, msg, 0)
+}
+
+// identity 已鉴权的调用方。
+type identity struct {
+	id, name string
+	key      *keys.Key // nil = legacy / 匿名（不受限）
+}
+
+// apiKey 依次读取 Authorization: Bearer、x-api-key（Anthropic）、api-key（Azure 风格）。
+func apiKey(r *http.Request) string {
+	if t := httpx.BearerToken(r); t != "" {
+		return t
 	}
+	if t := strings.TrimSpace(r.Header.Get("X-Api-Key")); t != "" {
+		return t
+	}
+	return strings.TrimSpace(r.Header.Get("Api-Key"))
+}
+
+func (g *Gateway) authenticate(w http.ResponseWriter, r *http.Request, ew errWriter) (*identity, bool) {
+	cfg := g.cfg()
+	tok := apiKey(r)
+	legacy := cfg.Gateway.LegacyAPIKey
+	if tok != "" && legacy != "" && httpx.SecretEqual(tok, legacy) {
+		return &identity{id: LegacyKeyID, name: "配置文件密钥"}, true
+	}
+	if tok != "" && g.keys != nil {
+		k, denied := g.keys.Authenticate(tok)
+		if denied == nil {
+			return &identity{id: k.ID, name: k.Name, key: &k}, true
+		}
+		if denied.Status != http.StatusUnauthorized || denied.Code != "invalid_api_key" {
+			if denied.RetryAfter > 0 {
+				w.Header().Set("Retry-After", strconv.Itoa(int(denied.RetryAfter.Seconds()+0.999)))
+			}
+			ew(w, denied.Status, denied.Code, denied.Msg)
+			return nil, false
+		}
+	}
+	if tok == "" && cfg.Gateway.AllowAnonymous {
+		return &identity{id: "anonymous", name: "匿名"}, true
+	}
+	ew(w, http.StatusUnauthorized, "invalid_api_key", "invalid or missing API key")
+	return nil, false
 }
 
 func (g *Gateway) healthz(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +134,20 @@ func (g *Gateway) healthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (g *Gateway) models(w http.ResponseWriter, r *http.Request) {
+	id, ok := g.authenticate(w, r, openAIErr)
+	if !ok {
+		return
+	}
 	entries := g.catalog.Entries(r.Context())
+	if id.key != nil && len(id.key.Models) > 0 {
+		kept := entries[:0:0]
+		for _, e := range entries {
+			if id.key.AllowsModel(e.Model.ID, e.FullID()) {
+				kept = append(kept, e)
+			}
+		}
+		entries = kept
+	}
 	gc := g.cfg().Gateway
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"object": "list",
@@ -83,49 +155,146 @@ func (g *Gateway) models(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
+func readJSON(r *http.Request) (map[string]any, error) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		httpx.WriteOpenAIError(w, http.StatusBadRequest, "invalid_request", "read body: "+err.Error(), 0)
-		return
+		return nil, fmt.Errorf("read body: %w", err)
 	}
 	var obj map[string]any
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 	if err := dec.Decode(&obj); err != nil || obj == nil {
-		httpx.WriteOpenAIError(w, http.StatusBadRequest, "invalid_json", "request body is not valid JSON", 0)
+		return nil, errors.New("request body is not valid JSON")
+	}
+	return obj, nil
+}
+
+func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
+	id, ok := g.authenticate(w, r, openAIErr)
+	if !ok {
 		return
 	}
+	obj, err := readJSON(r)
+	if err != nil {
+		openAIErr(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	g.serve(w, r, id, obj, ProtoChat, openAIErr, nil)
+}
+
+func (g *Gateway) messages(w http.ResponseWriter, r *http.Request) {
+	id, ok := g.authenticate(w, r, writeAnthropicError)
+	if !ok {
+		return
+	}
+	in, err := readJSON(r)
+	if err != nil {
+		writeAnthropicError(w, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	obj, stream, err := anthropicToChat(in)
+	if err != nil {
+		writeAnthropicError(w, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	model, _ := in["model"].(string)
+	g.serve(w, r, id, obj, ProtoMessages, writeAnthropicError, func(cw http.ResponseWriter) chatSink {
+		return newAnthropicSink(cw, model, stream)
+	})
+}
+
+func (g *Gateway) countTokens(w http.ResponseWriter, r *http.Request) {
+	if _, ok := g.authenticate(w, r, writeAnthropicError); !ok {
+		return
+	}
+	in, err := readJSON(r)
+	if err != nil {
+		writeAnthropicError(w, http.StatusBadRequest, "", err.Error())
+		return
+	}
+	n := estimateTokens([]any{in["system"], in["messages"], in["tools"]})
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"input_tokens": n})
+}
+
+func (g *Gateway) responses(w http.ResponseWriter, r *http.Request) {
+	id, ok := g.authenticate(w, r, openAIErr)
+	if !ok {
+		return
+	}
+	in, err := readJSON(r)
+	if err != nil {
+		openAIErr(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	obj, stream, err := responsesToChat(in)
+	if err != nil {
+		openAIErr(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	model, _ := in["model"].(string)
+	g.serve(w, r, id, obj, ProtoResponses, openAIErr, func(cw http.ResponseWriter) chatSink {
+		return newResponsesSink(cw, model, stream, in)
+	})
+}
+
+// serve 公共管线。obj 为 OpenAI Chat 请求体；mkSink 非 nil 时把输出翻译为对应协议。
+func (g *Gateway) serve(w http.ResponseWriter, r *http.Request, id *identity, obj map[string]any, proto string, ew errWriter, mkSink func(http.ResponseWriter) chatSink) {
+	start := time.Now()
 	reqModel, _ := obj["model"].(string)
+	stream, _ := obj["stream"].(bool)
+	ent := requests.Entry{
+		ID: newRequestID(), Time: start, Protocol: proto, KeyID: id.id, KeyName: id.name,
+		RequestedModel: reqModel, Stream: stream, ClientIP: clientIP(r), UserAgent: truncate(r.UserAgent(), 160),
+	}
+	w.Header().Set("X-Request-Id", ent.ID)
+	reject := func(status int, code, msg string, retry time.Duration) {
+		if retry > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retry.Seconds()+0.999)))
+		}
+		ew(w, status, code, msg)
+		ent.Status, ent.Error, ent.ErrorKind = status, msg, code
+		g.record(ent, start)
+	}
+
 	if strings.TrimSpace(reqModel) == "" {
-		httpx.WriteOpenAIError(w, http.StatusBadRequest, "model_required", "field 'model' is required", 0)
+		reject(http.StatusBadRequest, "model_required", "field 'model' is required", 0)
 		return
 	}
 	entry, err := g.catalog.Resolve(r.Context(), reqModel)
 	if err != nil {
 		var unk router.ErrUnknownModel
 		if errors.As(err, &unk) {
-			// 有平台目录拉取失败时，「找不到」可能只是暂时不可用（账号全冷却 / 上游故障），
-			// 返回 503 让客户端稍后重试，而不是 404 让它以为模型不存在。
+			// 有平台目录拉取失败时，「找不到」可能只是暂时不可用，返回 503 让客户端稍后重试。
 			if errs := g.catalog.Errors(); len(errs) > 0 {
 				var parts []string
 				for p, e := range errs {
 					parts = append(parts, p+": "+e)
 				}
-				httpx.WriteOpenAIError(w, http.StatusServiceUnavailable, "catalog_unavailable",
+				reject(http.StatusServiceUnavailable, "catalog_unavailable",
 					fmt.Sprintf("model %q not found; model catalog partially unavailable (%s)", reqModel, strings.Join(parts, "; ")), 30*time.Second)
 				return
 			}
-			httpx.WriteOpenAIError(w, http.StatusNotFound, "model_not_found", err.Error(), 0)
+			reject(http.StatusNotFound, "model_not_found", err.Error(), 0)
 			return
 		}
-		httpx.WriteOpenAIError(w, http.StatusBadGateway, "catalog_error", err.Error(), 0)
+		reject(http.StatusBadGateway, "catalog_error", err.Error(), 0)
 		return
+	}
+	ent.Provider, ent.Model = entry.Provider, entry.Model.ID
+	if id.key != nil && !id.key.AllowsModel(entry.Model.ID, entry.FullID()) {
+		reject(http.StatusForbidden, "model_not_allowed", fmt.Sprintf("model %q is not allowed for this API key", reqModel), 0)
+		return
+	}
+	if id.key != nil && g.keys != nil {
+		if d := g.keys.Allow(*id.key); d != nil {
+			reject(d.Status, d.Code, d.Msg, d.RetryAfter)
+			return
+		}
 	}
 	p, ok := g.reg.Get(entry.Provider)
 	chat, isChat := p.(provider.ChatCapable)
 	if !ok || !isChat {
-		httpx.WriteOpenAIError(w, http.StatusServiceUnavailable, "provider_unavailable", "provider "+entry.Provider+" is not available", 0)
+		reject(http.StatusServiceUnavailable, "provider_unavailable", "provider "+entry.Provider+" is not available", 0)
 		return
 	}
 
@@ -144,30 +313,33 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	if applied != "" {
 		w.Header().Set("X-Reasoning-Effort-Applied", applied)
 	}
+	ent.Effort, ent.EffortAsked = applied, requested
 	obj["model"] = entry.Model.ID
-	stream, _ := obj["stream"].(bool)
-	out, _ := json.Marshal(obj)
+	body, _ := json.Marshal(obj)
 
 	req := &provider.ChatRequest{
-		Model:           entry.Model.ID,
-		RequestedModel:  reqModel,
-		Body:            out,
-		Stream:          stream,
-		ReasoningEffort: applied,
-		RequestID:       newRequestID(),
-		ClientIP:        clientIP(r),
-		UserAgent:       r.UserAgent(),
-		Picker:          g.picker,
-		Header:          r.Header,
+		Model: entry.Model.ID, RequestedModel: reqModel, Body: body, Stream: stream,
+		ReasoningEffort: applied, RequestID: ent.ID, ClientIP: ent.ClientIP, UserAgent: r.UserAgent(),
+		KeyID: id.id, Picker: g.picker, Header: r.Header,
 	}
-	w.Header().Set("X-Request-Id", req.RequestID)
-	rw := newRespRewriter(w, reqModel)
+
+	var pw *protoWriter
+	var target http.ResponseWriter = w
+	if mkSink != nil {
+		pw = newProtoWriter(w, mkSink(w))
+		target = pw
+	}
+	rw := newRespRewriter(target, reqModel)
 	outcome := chat.ServeChat(r.Context(), req, rw)
 	rw.Finish()
+	if pw != nil {
+		pw.Finish()
+	}
 	if outcome.Status == 0 {
 		outcome.Status = rw.status
 	}
-	if !outcome.HasUsage && rw.hasUsage {
+	if rw.hasUsage {
+		// 网关从响应中解析到的 usage 最权威（含 Provider 未回传的缓存 / 推理字段）。
 		outcome.Usage, outcome.HasUsage = rw.usage, true
 	}
 	if outcome.ErrorMsg == "" {
@@ -176,22 +348,39 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	if outcome.TTFB == 0 {
 		outcome.TTFB = rw.ttfb
 	}
-	logChat(req, entry.Provider, outcome, time.Since(rw.started))
+
+	u := outcome.Usage
+	ent.Status, ent.AccountID, ent.Attempts = outcome.Status, outcome.AccountID, outcome.Attempts
+	ent.ErrorKind, ent.Error = outcome.ErrorKind, outcome.ErrorMsg
+	ent.PromptTokens, ent.CompletionTokens, ent.CachedTokens, ent.ReasoningTokens = u.PromptTokens, u.CompletionTokens, u.CachedTokens, u.ReasoningTokens
+	ent.Credit, ent.HasCredit = u.Credit, u.HasCredit
+	ent.TTFBMs = outcome.TTFB.Milliseconds()
+	g.record(ent, start)
 }
 
-// logChat 输出一行请求摘要（P5 起接入请求日志存储）。
-func logChat(req *provider.ChatRequest, prov string, o provider.ChatOutcome, dur time.Duration) {
-	u := o.Usage
-	credit := "-"
-	if u.HasCredit {
-		credit = strconv.FormatFloat(u.Credit, 'f', -1, 64)
+// record 写请求日志、累计 Key 用量并输出一行进程日志。
+func (g *Gateway) record(e requests.Entry, start time.Time) {
+	e.DurationMs = time.Since(start).Milliseconds()
+	e.OK = e.Status >= 200 && e.Status < 300 && e.Error == ""
+	if g.reqs != nil {
+		g.reqs.Add(e)
 	}
-	line := fmt.Sprintf("[gateway] %s %s/%s status=%d stream=%v effort=%s in=%d out=%d cached=%d credit=%s ttfb=%s dur=%s",
-		req.RequestID, prov, req.Model, o.Status, req.Stream, orDash(req.ReasoningEffort),
-		u.PromptTokens, u.CompletionTokens, u.CachedTokens, credit,
-		o.TTFB.Round(time.Millisecond), dur.Round(time.Millisecond))
-	if o.ErrorMsg != "" {
-		line += " err=" + truncate(o.ErrorMsg, 160)
+	if g.keys != nil && e.KeyID != LegacyKeyID && e.KeyID != "anonymous" {
+		g.keys.Record(e.KeyID, e.OK, e.PromptTokens, e.CompletionTokens, e.CachedTokens, e.Credit)
+	}
+	credit := "-"
+	if e.HasCredit {
+		credit = strconv.FormatFloat(e.Credit, 'f', -1, 64)
+	}
+	acct := e.AccountID
+	if len(acct) > 8 {
+		acct = acct[:8]
+	}
+	line := fmt.Sprintf("[gateway] %s %s %s/%s acct=%s key=%s status=%d stream=%v effort=%s in=%d out=%d cached=%d credit=%s ttfb=%dms dur=%dms",
+		e.ID, e.Protocol, orDash(e.Provider), orDash(e.Model), orDash(acct), e.KeyName, e.Status, e.Stream, orDash(e.Effort),
+		e.PromptTokens, e.CompletionTokens, e.CachedTokens, credit, e.TTFBMs, e.DurationMs)
+	if e.Error != "" {
+		line += " err=" + truncate(e.Error, 160)
 	}
 	log.Print(line)
 }
@@ -241,4 +430,8 @@ func clientIP(r *http.Request) string {
 
 func newRequestID() string {
 	return "req_" + config.RandomKey("")[:24]
+}
+
+func newShortID() string {
+	return config.RandomKey("")[:24]
 }
