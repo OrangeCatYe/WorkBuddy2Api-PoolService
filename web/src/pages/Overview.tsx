@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Activity, AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, Coins, Flame, Hourglass, Layers, ShieldAlert, ScrollText } from 'lucide-react'
-import { useAccounts, useCredits, useOverview, useRequests, useUsageStats } from '@/lib/queries'
+import { Activity, AlertTriangle, CalendarX2, ArrowUpRight, CheckCircle2, Clock3, Coins, Flame, Hourglass, Layers, ShieldAlert, ScrollText } from 'lucide-react'
+import { useAccounts, useCredits, useLatestRuns, useOverview, useRequests, useUsageStats } from '@/lib/queries'
 import { fmtNum, fmtRelative, fmtTokens, pct } from '@/lib/format'
 import { Badge, Card, CardHeader, Empty, Meter, Skeleton, cx } from '@/components/ui'
-import type { Account, CreditsSnapshot, Overview, UsageStats } from '@/types'
+import type { Account, CreditsSnapshot, Overview, TaskRun, UsageStats } from '@/types'
 
 // ---------------- 顶部指标 ----------------
 
@@ -71,8 +71,21 @@ function Ledger({ ov, cr }: { ov?: Overview; cr?: CreditsSnapshot }) {
 
 type Alert = { id: string; tone: 'bad' | 'warn' | 'info'; icon: React.ReactNode; title: string; hint?: string; to: string }
 
-function buildAlerts(accounts: Account[] | undefined, cr: CreditsSnapshot | undefined, usage: UsageStats | undefined): Alert[] {
+function buildAlerts(accounts: Account[] | undefined, cr: CreditsSnapshot | undefined, usage: UsageStats | undefined, runs?: Record<string, TaskRun>): Alert[] {
   const out: Alert[] = []
+  // 24 小时内结束、且有账号失败的任务（取每个任务最近一次）
+  Object.values(runs ?? {})
+    .filter((r) => r.ended_at && (r.status === 'failed' || r.status === 'partial') && Date.now() - new Date(r.ended_at).getTime() < 86400_000)
+    .forEach((r) =>
+      out.push({
+        id: `run-${r.provider}/${r.task}`,
+        tone: r.status === 'failed' ? 'bad' : 'warn',
+        icon: <CalendarX2 size={15} />,
+        title: `${r.task_name}：${r.summary.failed} 个账号失败`,
+        hint: `最近一次 ${fmtRelative(r.started_at)}执行，成功 ${r.summary.ok}、跳过 ${r.summary.skipped}`,
+        to: '/tasks',
+      }),
+    )
   const acc = accounts ?? []
   const broken = acc.filter((a) => a.status === 'error' || a.status === 'disabled')
   if (broken.length) {
@@ -334,7 +347,8 @@ export function OverviewPage() {
   const { data: cr } = useCredits()
   const { data: accounts } = useAccounts()
   const { data: usage } = useUsageStats(24)
-  const alerts = buildAlerts(accounts, cr, usage)
+  const { data: runs } = useLatestRuns()
+  const alerts = buildAlerts(accounts, cr, usage, runs)
 
   return (
     <div className="space-y-6">
