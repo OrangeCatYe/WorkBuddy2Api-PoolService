@@ -2,6 +2,14 @@
   "listen": "127.0.0.1:7863",
   "data_dir": "./data",
   "admin_key": "adm-change-me",
+  "credits": {
+    "strategy": "waste_first",
+    "waste_boost": 4,
+    "expensive_rate": 0.5,
+    "daily_cap": 0,
+    "reserve": 0,
+    "burn_window_days": 7
+  },
   "gateway": {
     "model_naming": "short",
     "catalog_ttl": "10m",

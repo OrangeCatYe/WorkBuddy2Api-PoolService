@@ -8,6 +8,7 @@ import (
 
 	"github.com/orangeruan/poolservice/internal/config"
 	"github.com/orangeruan/poolservice/internal/core/account"
+	"github.com/orangeruan/poolservice/internal/core/credits"
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
 	"github.com/orangeruan/poolservice/internal/gateway"
@@ -28,6 +29,7 @@ type API struct {
 	started time.Time
 	keys    *keys.Store
 	reqs    *requests.Recorder
+	credits *credits.Service
 }
 
 // New 创建。
@@ -45,6 +47,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerProviderRoutes(mux)
 	a.registerSettingsRoutes(mux)
 	a.registerGatewayRoutes(mux)
+	a.registerCreditsRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {

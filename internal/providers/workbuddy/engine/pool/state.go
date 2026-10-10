@@ -399,6 +399,9 @@ func (p *Pool) PickByUIDForModel(uid, model string) *auth.Auth {
 	if p.inFlightFull(e) {
 		return nil
 	}
+	if p.pickObserver != nil {
+		p.pickObserver(PickEvent{Time: now, Model: model, Realm: e.a.Realm(), Chosen: uid, Sticky: true})
+	}
 	e.lastUsed = now
 	p.pickSeq++
 	e.usedSeq = p.pickSeq

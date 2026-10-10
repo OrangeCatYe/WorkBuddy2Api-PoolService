@@ -196,6 +196,40 @@ func (r *Recorder) gcLocked() {
 	}
 }
 
+// ScanArchive 依时间顺序遍历 since 以来的归档记录（启动时重建统计用）。
+func (r *Recorder) ScanArchive(since time.Time, fn func(Entry)) {
+	if r.cfg.Dir == "" {
+		return
+	}
+	r.fileMu.Lock()
+	if r.writer != nil {
+		_ = r.writer.Flush()
+	}
+	r.fileMu.Unlock()
+	files, _ := filepath.Glob(filepath.Join(r.cfg.Dir, "requests-*.jsonl"))
+	sort.Strings(files)
+	first := since.Format("2006-01-02")
+	for _, file := range files {
+		d := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(file), "requests-"), ".jsonl")
+		if d < first {
+			continue
+		}
+		f, err := os.Open(file)
+		if err != nil {
+			continue
+		}
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 64<<10), 1<<20)
+		for sc.Scan() {
+			var e Entry
+			if json.Unmarshal(sc.Bytes(), &e) == nil && !e.Time.Before(since) {
+				fn(e)
+			}
+		}
+		f.Close()
+	}
+}
+
 // Close 刷盘关闭。
 func (r *Recorder) Close() {
 	r.fileMu.Lock()

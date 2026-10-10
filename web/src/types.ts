@@ -245,3 +245,92 @@ export interface ConnectInfo {
   listen: string
   has_legacy: boolean
 }
+
+export interface CreditsStrategy {
+  strategy: 'waste_first' | 'off'
+  waste_boost: number
+  expensive_rate: number
+  daily_cap: number
+  reserve: number
+  burn_window_days: number
+}
+
+export interface PackageForecast {
+  name?: string
+  source?: string
+  amount: number
+  remaining: number
+  expire_at?: string
+  used: number
+  waste: number
+}
+
+export interface CreditSim {
+  packages?: PackageForecast[]
+  waste: number
+  first_waste_at?: string
+  exhaust_at?: string
+  required_per_day: number
+  expiring_24h: number
+  expiring_72h: number
+  expiring_7d: number
+  expiring_30d: number
+  next_expire_at?: string
+  next_expire_amount: number
+  no_expiry: number
+}
+
+export interface AccountForecast extends CreditSim {
+  provider: string
+  account_id: string
+  label: string
+  status: AccountStatus
+  remaining: number
+  total: number
+  burn_per_day: number
+  observed_days: number
+  today_credit: number
+  today_requests: number
+  series: number[]
+  urgency: number
+  capped?: boolean
+  note?: string
+}
+
+export interface CreditsSnapshot {
+  updated_at: string
+  history_since: string
+  window_days: number
+  strategy: CreditsStrategy
+  pool: {
+    remaining: number
+    burn_per_day: number
+    today_credit: number
+    expiring_24h: number
+    expiring_72h: number
+    expiring_7d: number
+    expiring_30d: number
+    waste: number
+    ideal_waste: number
+    required_per_day: number
+    exhaust_at?: string
+    next_expire_at?: string
+    accounts: number
+  }
+  calendar: { date: string; expiring: number; waste: number; packages: number }[]
+  accounts: AccountForecast[]
+  tunable_providers: string[] | null
+}
+
+export interface Decision {
+  time: string
+  provider: string
+  model: string
+  rate: number
+  chosen: string
+  chosen_label: string
+  fallback?: boolean
+  explored?: boolean
+  reason: string
+  candidates?: { account_id: string; label: string; weight: number; bias: number; share: number; tier: number; note?: string }[]
+}

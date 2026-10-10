@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Account, ApiKey, ConnectInfo, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, RequestEntry, UsageStats } from '@/types'
+import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, RequestEntry, UsageStats } from '@/types'
 
 export const useMeta = () => useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/api/meta'), staleTime: 60_000 })
 
@@ -58,3 +58,13 @@ export const useRequests = (params: Record<string, string>, live: boolean) =>
 
 export const useUsageStats = (hours: number) =>
   useQuery({ queryKey: ['usage', hours], queryFn: () => api<UsageStats>(`/api/usage/stats?hours=${hours}`), refetchInterval: 15_000 })
+
+export const useCredits = () => useQuery({ queryKey: ['credits'], queryFn: () => api<CreditsSnapshot>('/api/credits'), refetchInterval: 30_000 })
+
+export const useDecisions = (live: boolean) =>
+  useQuery({
+    queryKey: ['decisions'],
+    queryFn: () => api<{ decisions: Decision[] }>('/api/credits/decisions?limit=60'),
+    select: (d) => d.decisions,
+    refetchInterval: live ? 5000 : false,
+  })
