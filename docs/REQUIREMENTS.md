@@ -112,11 +112,11 @@ ttswitch 解析字段（含别名）与本项目输出：
 | `id` | - | `cn:glm-5.2` | `glm-5.2`（短名）及可选 `workbuddy/glm-5.2` |
 | `owned_by` | - | `workbuddy` | Provider ID |
 | `display_name` | `name` | `name` | `display_name` + `name` |
-| `context_window` | `context_length` 等 | `context_length` ✅ | 两者都输出 |
+| `context_window` | `context_length` 等 | `context_length` ✅ | 只输出 `context_window`（同组别名重复会导致 ttswitch 整个列表解析失败） |
 | `max_output_tokens` | `max_tokens` 等 | ✅ | ✅ |
 | `input_modalities` | - | ❌（输出的是 `supports_images`） | `["text","image"]` / `["text"]` |
 | `supports_tools` | `supports_function_calling` 等 | ❌（输出的是 `supports_tool_call`） | ✅ |
-| `reasoning_levels` | `reasoning_efforts` | ❌（输出的是 `reasoning_supported_efforts`） | `reasoning_levels` + `reasoning_efforts` |
+| `reasoning_levels` | `reasoning_efforts` | ❌（输出的是 `reasoning_supported_efforts`） | 只输出 `reasoning_levels` |
 
 原有扩展字段（倍率 `credits`、`tags`、`vendor`、`reasoning_default_effort`）继续保留。
 
