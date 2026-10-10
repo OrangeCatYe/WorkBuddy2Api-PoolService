@@ -19,9 +19,9 @@ const fmtDays = (iso?: string) => {
 
 function Kpi({ label, value, sub, tone, children }: { label: string; value: string; sub?: React.ReactNode; tone?: 'bad' | 'warn' | 'ok'; children?: React.ReactNode }) {
   return (
-    <Card className="px-5 py-4">
+    <Card className="px-4 py-3.5 sm:px-5 sm:py-4">
       <div className="eyebrow">{label}</div>
-      <div className={cx('num mt-1 font-display text-[26px] font-semibold leading-none', tone === 'bad' && 'text-bad', tone === 'warn' && 'text-warn', tone === 'ok' && 'text-ok')}>{value}</div>
+      <div className={cx('num mt-1 font-display text-[22px] sm:text-[26px] font-semibold leading-none', tone === 'bad' && 'text-bad', tone === 'warn' && 'text-warn', tone === 'ok' && 'text-ok')}>{value}</div>
       {sub && <div className="mt-1.5 text-[12px] text-muted">{sub}</div>}
       {children}
     </Card>
@@ -33,7 +33,7 @@ function Summary({ s }: { s: CreditsSnapshot }) {
   const saved = p.waste - p.ideal_waste
   const pace = p.required_per_day > 0 ? pct(p.burn_per_day, p.required_per_day) : 100
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
       <Kpi label="可用积分" value={fmtNum(p.remaining)} sub={`${p.accounts} 个账号 · 今日已用 ${fmtNum(p.today_credit)}`} />
       <Kpi
         label="7 天内到期"

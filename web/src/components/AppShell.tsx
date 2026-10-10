@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
@@ -7,11 +8,13 @@ import {
   Coins,
   KeyRound,
   LayoutDashboard,
+  Menu,
   Moon,
   ScrollText,
   Settings,
   Sun,
   Users,
+  X,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useMeta, useOverview } from '@/lib/queries'
@@ -92,68 +95,107 @@ function ProviderDock() {
             </li>
           )
         })}
-        {!meta?.providers.length && <li className="px-1.5 py-1 text-[12.5px] text-faint">尚未启用任何平台</li>}
+        {!meta && <li className="mx-1.5 my-1 h-4 animate-pulse rounded bg-surface" />}
+        {meta && !meta.providers.length && <li className="px-1.5 py-1 text-[12.5px] text-faint">尚未启用任何平台</li>}
       </ul>
     </div>
   )
 }
 
-export function AppShell() {
+function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { theme, toggle } = useTheme()
   const { data: meta } = useMeta()
+  return (
+    <>
+      <Brand />
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2" onClick={(e) => (e.target as HTMLElement).closest('a') && onNavigate?.()}>
+        {groups.map((g) => (
+          <div key={g.title}>
+            <div className="eyebrow mb-1 px-2.5">{g.title}</div>
+            {g.items.map((it) => (
+              <NavLink
+                key={it.to}
+                to={it.to}
+                end={it.end}
+                className={({ isActive }) =>
+                  cx(
+                    'group relative flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] transition-colors',
+                    isActive ? 'bg-sunken font-medium text-ink' : 'text-muted hover:bg-sunken/60 hover:text-ink',
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <span className={cx('absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r bg-accent transition-opacity', isActive ? 'opacity-100' : 'opacity-0')} />
+                    <span className={isActive ? 'text-accent' : ''}>{it.icon}</span>
+                    {it.label}
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        ))}
+      </nav>
+      <div onClick={(e) => (e.target as HTMLElement).closest('a') && onNavigate?.()}>
+        <ProviderDock />
+      </div>
+      <div className="flex items-center justify-between px-4 text-[12px] text-faint">
+        <span className="num flex min-w-0 items-center gap-1 truncate" title={meta?.version}>
+          <BookOpen size={13} /> {meta ? `v${meta.version.replace(/^v/, '')}` : '…'}
+        </span>
+        <button onClick={toggle} className="rounded-md p-1.5 hover:bg-sunken hover:text-ink" aria-label="切换主题">
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+      </div>
+    </>
+  )
+}
+
+export function AppShell() {
   const loc = useLocation()
   const title = titles[loc.pathname] ?? ''
+  const [navOpen, setNavOpen] = useState(false)
+
+  useEffect(() => setNavOpen(false), [loc.pathname])
+  useEffect(() => {
+    if (!navOpen) return
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && setNavOpen(false)
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [navOpen])
 
   return (
     <div className="relative z-10 flex h-full">
-      <aside className="flex w-[232px] shrink-0 flex-col gap-5 border-r border-line bg-surface/70 py-5 backdrop-blur">
-        <Brand />
-        <nav className="flex-1 space-y-4 overflow-y-auto px-2">
-          {groups.map((g) => (
-            <div key={g.title}>
-              <div className="eyebrow mb-1 px-2.5">{g.title}</div>
-              {g.items.map((it) => (
-                <NavLink
-                  key={it.to}
-                  to={it.to}
-                  end={it.end}
-                  className={({ isActive }) =>
-                    cx(
-                      'group relative flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[13.5px] transition-colors',
-                      isActive ? 'bg-sunken font-medium text-ink' : 'text-muted hover:bg-sunken/60 hover:text-ink',
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span className={cx('absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r bg-accent transition-opacity', isActive ? 'opacity-100' : 'opacity-0')} />
-                      <span className={isActive ? 'text-accent' : ''}>{it.icon}</span>
-                      {it.label}
-                    </>
-                  )}
-                </NavLink>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <ProviderDock />
-        <div className="flex items-center justify-between px-4 text-[12px] text-faint">
-          <span className="num flex min-w-0 items-center gap-1 truncate" title={meta?.version}>
-<BookOpen size={13} /> v{meta?.version?.replace(/^v/, '') ?? '—'}
-          </span>
-          <button onClick={toggle} className="rounded-md p-1.5 hover:bg-sunken hover:text-ink" aria-label="切换主题">
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-        </div>
+      {/* 宽屏：固定侧栏 */}
+      <aside className="hidden w-[232px] shrink-0 flex-col gap-5 border-r border-line bg-surface/70 py-5 backdrop-blur lg:flex">
+        <Sidebar />
       </aside>
 
+      {/* 窄屏：抽屉侧栏 */}
+      {navOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 animate-fade bg-ink/30" onClick={() => setNavOpen(false)} />
+          <aside className="absolute left-0 top-0 flex h-full w-[260px] max-w-[85vw] animate-slideInLeft flex-col gap-5 border-r border-line bg-surface py-5 shadow-pop">
+            <button onClick={() => setNavOpen(false)} className="absolute right-3 top-5 rounded-md p-1.5 text-faint hover:bg-sunken hover:text-ink" aria-label="关闭菜单">
+              <X size={16} />
+            </button>
+            <Sidebar onNavigate={() => setNavOpen(false)} />
+          </aside>
+        </div>
+      )}
+
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-line px-8">
-          <h1 className="font-display text-[19px] font-semibold tracking-tight">{title}</h1>
-          <span className="eyebrow">{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</span>
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-line px-4 sm:px-8">
+          <div className="flex min-w-0 items-center gap-2">
+            <button onClick={() => setNavOpen(true)} className="-ml-1.5 rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink lg:hidden" aria-label="打开菜单">
+              <Menu size={19} />
+            </button>
+            <h1 className="truncate font-display text-[18px] font-semibold tracking-tight sm:text-[19px]">{title}</h1>
+          </div>
+          <span className="eyebrow hidden sm:inline">{new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' })}</span>
         </header>
         <div className="flex-1 overflow-y-auto">
-          <div key={loc.pathname} className="mx-auto max-w-[1280px] animate-rise px-8 py-7">
+          <div key={loc.pathname} className="mx-auto max-w-[1280px] animate-rise px-4 py-5 sm:px-8 sm:py-7">
             <Outlet />
           </div>
         </div>

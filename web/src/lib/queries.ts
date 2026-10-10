@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, RequestEntry, UsageStats } from '@/types'
+import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, RequestEntry, UsageStats } from '@/types'
 
 export const useMeta = () => useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/api/meta'), staleTime: 60_000 })
 
@@ -68,3 +68,6 @@ export const useDecisions = (live: boolean) =>
     select: (d) => d.decisions,
     refetchInterval: live ? 5000 : false,
   })
+
+export const useProviderSettings = (pid: string) =>
+  useQuery({ queryKey: ['provider-settings', pid], queryFn: () => api<ProviderSettings>(`/api/providers/${encodeURIComponent(pid)}/settings`), enabled: !!pid })

@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { Pause, Play, ScrollText, Search } from 'lucide-react'
 import { useKeys, useMeta, useRequests } from '@/lib/queries'
@@ -91,7 +92,8 @@ export function LogsPage() {
   const { data: meta } = useMeta()
   const { data: keys } = useKeys()
   const [live, setLive] = useState(true)
-  const [f, setF] = useState({ protocol: '', status: '', provider: '', key: '', q: '' })
+  const [search] = useSearchParams()
+  const [f, setF] = useState(() => ({ protocol: search.get('protocol') ?? '', status: search.get('status') ?? '', provider: search.get('provider') ?? '', key: search.get('key') ?? '', q: search.get('q') ?? '' }))
   const [open, setOpen] = useState<RequestEntry | null>(null)
   const params = useMemo(() => Object.fromEntries(Object.entries({ ...f, limit: '300' }).filter(([, v]) => v)), [f])
   const { data: rows, isLoading } = useRequests(params, live)
@@ -134,11 +136,11 @@ export function LogsPage() {
             </option>
           ))}
         </select>
-        <label className="flex h-9 w-56 items-center gap-2 rounded-lg border border-line bg-surface px-3 focus-within:border-accent">
+        <label className="flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 focus-within:border-accent sm:w-56">
           <Search size={14} className="text-faint" />
           <input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="模型、账号、错误、ID" className="w-full bg-transparent text-[13px] outline-none" />
         </label>
-        <div className="ml-auto flex items-center gap-3 text-[12.5px] text-muted">
+        <div className="flex w-full items-center justify-between gap-3 text-[12.5px] text-muted sm:ml-auto sm:w-auto sm:justify-end">
           <span className="num">
             {summary.n} 条 · 失败 <span className={summary.fail ? 'text-bad' : ''}>{summary.fail}</span> · 积分 {fmtNum(summary.credit)}
           </span>
@@ -148,7 +150,8 @@ export function LogsPage() {
         </div>
       </div>
 
-      <Card className="overflow-x-auto">
+      <Card className="overflow-hidden">
+        <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[880px] whitespace-nowrap text-left">
           <thead>
             <tr className="border-b border-line text-[12px] text-faint">
@@ -204,6 +207,42 @@ export function LogsPage() {
             ))}
           </tbody>
         </table>
+        </div>
+        <ul className="divide-y divide-line md:hidden">
+          {isLoading && (
+            <li className="p-4">
+              <Skeleton className="h-12" />
+            </li>
+          )}
+          {rows?.map((e) => (
+            <li key={e.id}>
+              <button onClick={() => setOpen(e)} className="flex w-full items-start gap-3 px-4 py-3 text-left active:bg-sunken/50">
+                <span className={cx('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', e.ok ? 'bg-ok' : 'bg-bad')} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="num truncate text-[13.5px] font-medium">{e.model || e.requested_model || '—'}</span>
+                    <span className="num shrink-0 text-[12.5px]">{e.has_credit ? fmtNum(e.credit) : '—'}</span>
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11.5px] text-faint">
+                    <span className="num">{clock(e.time)}</span>
+                    <span>·</span>
+                    <span>{protoLabel[e.protocol]}</span>
+                    <span>·</span>
+                    <span className="num">
+                      {fmtTokens(e.prompt_tokens)} → {fmtTokens(e.completion_tokens)}
+                    </span>
+                    {e.ttfb_ms ? <span className="num">· 首字 {ms(e.ttfb_ms)}</span> : null}
+                  </div>
+                  {!e.ok && (
+                    <div className="mt-1 truncate text-[11.5px] text-bad">
+                      {e.status} {e.error_kind || e.error}
+                    </div>
+                  )}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
         {!isLoading && !rows?.length && <Empty icon={<ScrollText size={28} />} title="暂无请求" hint="网关收到的请求会实时出现在这里（只记录元数据，不保存对话内容）。" />}
       </Card>
       {open && <Detail e={open} onClose={() => setOpen(null)} />}
