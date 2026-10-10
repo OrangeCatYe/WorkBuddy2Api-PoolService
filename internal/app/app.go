@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 // App 应用实例。
 type App struct {
 	cfg     atomic.Pointer[config.Config]
+	cfgMu   sync.Mutex
 	reg     *provider.Registry
 	catalog *router.Catalog
 	server  *http.Server
@@ -70,7 +72,7 @@ func New(cfg *config.Config) (*App, error) {
 	gateway.New(current, a.reg, a.catalog, nil).Register(mux)
 
 	apiMux := http.NewServeMux()
-	panelapi.New(current, a.reg, a.catalog).Register(apiMux)
+	panelapi.New(current, a.updateConfig, a.reg, a.catalog).Register(apiMux)
 	mux.Handle("/api/", httpx.SecurityHeaders(apiMux))
 
 	mux.Handle("GET /panel/", http.RedirectHandler("/", http.StatusMovedPermanently))
@@ -88,6 +90,19 @@ func New(cfg *config.Config) (*App, error) {
 
 // Registry 暴露注册表（测试与扩展用）。
 func (a *App) Registry() *provider.Registry { return a.reg }
+
+// updateConfig 复制当前配置 → 修改 → 落盘 → 原子替换；落盘失败不影响运行中配置。
+func (a *App) updateConfig(mut func(*config.Config)) error {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	next := a.cfg.Load().Clone()
+	mut(next)
+	if err := next.Save(); err != nil {
+		return err
+	}
+	a.cfg.Store(next)
+	return nil
+}
 
 // Run 启动 Provider 后台任务与 HTTP 服务，直到 ctx 取消。
 // 退出顺序：先优雅关闭 HTTP（等在途请求结束），再逆序停止 Provider 并落盘。

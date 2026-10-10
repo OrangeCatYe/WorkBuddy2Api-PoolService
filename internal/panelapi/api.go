@@ -20,14 +20,15 @@ var Version = "dev"
 // API 面板接口。
 type API struct {
 	cfg     func() *config.Config
+	update  Updater
 	reg     *provider.Registry
 	catalog *router.Catalog
 	started time.Time
 }
 
 // New 创建。
-func New(cfg func() *config.Config, reg *provider.Registry, catalog *router.Catalog) *API {
-	return &API{cfg: cfg, reg: reg, catalog: catalog, started: time.Now()}
+func New(cfg func() *config.Config, update Updater, reg *provider.Registry, catalog *router.Catalog) *API {
+	return &API{cfg: cfg, update: update, reg: reg, catalog: catalog, started: time.Now()}
 }
 
 // Register 挂载路由。
@@ -38,6 +39,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/models", a.auth(a.models))
 	mux.HandleFunc("POST /api/models/refresh", a.auth(a.refreshModels))
 	a.registerProviderRoutes(mux)
+	a.registerSettingsRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {

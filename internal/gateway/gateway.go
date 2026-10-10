@@ -105,6 +105,17 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var unk router.ErrUnknownModel
 		if errors.As(err, &unk) {
+			// 有平台目录拉取失败时，「找不到」可能只是暂时不可用（账号全冷却 / 上游故障），
+			// 返回 503 让客户端稍后重试，而不是 404 让它以为模型不存在。
+			if errs := g.catalog.Errors(); len(errs) > 0 {
+				var parts []string
+				for p, e := range errs {
+					parts = append(parts, p+": "+e)
+				}
+				httpx.WriteOpenAIError(w, http.StatusServiceUnavailable, "catalog_unavailable",
+					fmt.Sprintf("model %q not found; model catalog partially unavailable (%s)", reqModel, strings.Join(parts, "; ")), 30*time.Second)
+				return
+			}
 			httpx.WriteOpenAIError(w, http.StatusNotFound, "model_not_found", err.Error(), 0)
 			return
 		}

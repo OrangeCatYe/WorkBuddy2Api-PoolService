@@ -52,7 +52,60 @@ export interface Meta {
   version: string
   started_at: string
   providers: ProviderMeta[]
-  gateway: { model_naming: string }
+  gateway: { model_naming: string; credit_in_model_name: boolean }
+}
+
+export interface LoginMethod {
+  id: string
+  name: string
+  description?: string
+  fields?: FieldDef[]
+}
+
+export interface LoginSession {
+  id: string
+  auth_url?: string
+  user_code?: string
+  expires_at: string
+}
+
+export interface LoginStatus {
+  state: 'pending' | 'success' | 'failed' | 'expired'
+  message?: string
+  account_id?: string
+}
+
+export interface ActionDef {
+  id: string
+  name: string
+  danger?: boolean
+  bulk?: boolean
+  confirm?: string
+}
+
+export interface ActionResult {
+  ok: boolean
+  message?: string
+}
+
+export interface TaskDef {
+  id: string
+  name: string
+  description?: string
+  hours?: number[]
+  enabled: boolean
+}
+
+export interface ProviderDetail {
+  meta: ProviderMeta
+  login_methods?: LoginMethod[]
+  actions?: ActionDef[]
+  tasks?: TaskDef[]
+}
+
+export interface GatewaySettings {
+  model_naming: 'short' | 'full' | 'both'
+  credit_in_model_name: boolean
 }
 
 export interface ProviderSummary {

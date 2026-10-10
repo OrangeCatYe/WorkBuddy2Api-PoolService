@@ -17,6 +17,9 @@ import { OverviewPage } from '@/pages/Overview'
 import { AccountsPage } from '@/pages/Accounts'
 import { ModelsPage } from '@/pages/Models'
 import { Placeholder } from '@/pages/Placeholder'
+import { TasksPage } from '@/pages/Tasks'
+import { SettingsPage } from '@/pages/Settings'
+import { ToastProvider } from '@/components/overlay'
 
 applyInitialTheme()
 
@@ -46,8 +49,8 @@ const router = createBrowserRouter([
       },
       { path: '/usage', element: <Placeholder phase="P5" title="用量分析" items={['Token / 积分时序', '按账号、模型、Key 维度拆分']} /> },
       { path: '/logs', element: <Placeholder phase="P5" title="请求日志" items={['请求记录筛选与详情', '运行日志分频道']} /> },
-      { path: '/tasks', element: <Placeholder phase="P6" title="任务" items={['签到 / 保活 / 余额刷新等定时任务', '成长任务中心']} /> },
-      { path: '/settings', element: <Placeholder phase="P5" title="设置" items={['服务与安全', '各平台配置']} /> },
+      { path: '/tasks', element: <TasksPage /> },
+      { path: '/settings', element: <SettingsPage /> },
     ],
   },
 ])
@@ -55,9 +58,11 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <LoginGate>
-        <RouterProvider router={router} />
-      </LoginGate>
+      <ToastProvider>
+        <LoginGate>
+          <RouterProvider router={router} />
+        </LoginGate>
+      </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,
 )

@@ -80,6 +80,16 @@ func Default() *Config {
 // Path 配置文件路径。
 func (c *Config) Path() string { return c.path }
 
+// Clone 深拷贝（Providers 原始 JSON 段逐个复制）。
+func (c *Config) Clone() *Config {
+	n := *c
+	n.Providers = make(map[string]json.RawMessage, len(c.Providers))
+	for k, v := range c.Providers {
+		n.Providers[k] = append(json.RawMessage(nil), v...)
+	}
+	return &n
+}
+
 // Load 读取配置；文件不存在时生成默认配置（含随机管理密钥）并落盘。
 func Load(path string) (*Config, bool, error) {
 	cfg := Default()
