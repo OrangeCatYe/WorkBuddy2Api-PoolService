@@ -1,0 +1,27 @@
+# 构建产物
+/bin/
+/dist/
+*.exe
+poolsvc
+
+# 前端
+web/node_modules/
+web/dist/
+internal/webui/dist/*
+!internal/webui/dist/.gitkeep
+
+# 运行时数据（含明文凭证，禁止提交）
+auths/
+data/
+backups/
+config.json
+*.key
+*.pem
+*.env
+.env
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+.DS_Store
