@@ -82,6 +82,9 @@ type Scheduler struct {
 	// balanceInterval 余额刷新间隔（纳秒，0=暂停）。atomic 读写：执行循环每轮读当前值，
 	// SetBalanceInterval 可任意时刻热改（面板保存配置）。
 	balanceInterval atomic.Int64
+
+	// reporter 执行记录（SetReporter 挂载；schedMu 保护）。
+	reporter Reporter
 }
 
 // New 构建。
@@ -441,16 +444,19 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// RunCheckinNow 立即对所有账号执行签到 + 余额刷新 + 解冻。
+// RunCheckinNow 立即对所有账号执行签到 + 余额刷新 + 解冻（定时触发）。
 // 冷却中的账号也参与（签到就是为了解冻它们）；禁用账号默认跳过——
 // 若 schedule.include_disabled_in_tasks 打开则一并执行（禁用只关选号，不停保号）。
 // 旅行已从签到剥离为独立排程（travel_hours），不再搭签到便车。
 // 末尾追加连登管家（streak.go）：可兑换档位自动兑换 + 抽奖次数自动抽完——
 // 连登兑换按天数解锁，挂在每日签到后即「到天数那天自动完成兑换→抽奖闭环」。
-func (s *Scheduler) RunCheckinNow() { s.RunCheckinFor(nil) }
+func (s *Scheduler) RunCheckinNow() { s.runCheckin(nil, TriggerSchedule) }
 
-// RunCheckinFor 同 RunCheckinNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
-func (s *Scheduler) RunCheckinFor(only []string) {
+// RunCheckinFor 同 RunCheckinNow，手动触发；only 非 nil 时只处理其中的账号（禁用账号也执行）。
+func (s *Scheduler) RunCheckinFor(only []string) { s.runCheckin(only, TriggerManual) }
+
+func (s *Scheduler) runCheckin(only []string, trigger string) {
+	rep := s.begin("checkin", only, trigger)
 	expiringSoon := s.ExpiringSoonWindow()
 	includeDisabled := only != nil || s.includeDisabledInTasks()
 	for _, st := range s.listFor(only) {
@@ -459,45 +465,54 @@ func (s *Scheduler) RunCheckinFor(only []string) {
 		}
 		a := s.cfg.Pool.AuthByUID(st.UID)
 		if a == nil || a.RefreshTokenValue() == "" {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "凭证缺少 refresh token", 0, 0)
 			continue
 		}
 		// D4 门控：realm=global 账号无签到体系，直接跳过（不发起任何上游调用，避免风控）。
 		// 经 auth.Realm() 统一判定：逃生门（global.enabled=false）下 global 账号被降级为 cn、
 		// 按 CN 处理——这是逃生门的刻意语义（纯 CN 部署锁死一切 global），与引用处一致。
 		if a.IsGlobal() {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "国际版没有签到", 0, 0)
 			continue
 		}
+		status, msg := StatusOK, ""
 		// 企业版无签到体系：上游对 POST /v2/billing/meter/daily-checkin 直接
 		// 400 code 10001「企业账号不支持该操作」。跳过签到，但**不 continue**——
 		// 下方余额查询照常跑（企业额度走 get-enterprise-user-usage 口径，且是
 		// credit_floor 判定与面板额度展示的唯一数据源）。
-		if !a.IsEnterprise() {
-			if err := s.cfg.Upstream.DailyCheckin(a); err != nil {
-				// "今天已签到"是幂等成功（上游对重复签到返回 code!=0），不再当失败打 error 行。
-				if upstream.IsAlreadyCheckin(err) {
-					s.cfg.Pool.NoteCheckinDone(st.UID)
-					log.Printf("checkin %s: 今天已签到（幂等）", logfmt.Label(st.UID, st.Nickname))
-				} else {
-					log.Printf("checkin %s: %v", logfmt.Label(st.UID, st.Nickname), err)
-				}
-				// 其余业务错误也继续走余额查询
-			} else {
-				// 首次签到成功此前静默——排查「签到到底跑没跑」时无迹可循（幂等行只在
-				// 重复触发时出现），成功也落一行。
+		if a.IsEnterprise() {
+			status, msg = StatusSkipped, "企业版没有签到"
+		} else if err := s.cfg.Upstream.DailyCheckin(a); err != nil {
+			// "今天已签到"是幂等成功（上游对重复签到返回 code!=0），不再当失败打 error 行。
+			if upstream.IsAlreadyCheckin(err) {
 				s.cfg.Pool.NoteCheckinDone(st.UID)
-				log.Printf("checkin %s: 签到成功", logfmt.Label(st.UID, st.Nickname))
+				log.Printf("checkin %s: 今天已签到（幂等）", logfmt.Label(st.UID, st.Nickname))
+				status, msg = StatusSkipped, "今天已签到"
+			} else {
+				log.Printf("checkin %s: %v", logfmt.Label(st.UID, st.Nickname), err)
+				status, msg = StatusFailed, errMsg("签到失败", err)
 			}
+			// 其余业务错误也继续走余额查询
+		} else {
+			// 首次签到成功此前静默——排查「签到到底跑没跑」时无迹可循（幂等行只在
+			// 重复触发时出现），成功也落一行。
+			s.cfg.Pool.NoteCheckinDone(st.UID)
+			log.Printf("checkin %s: 签到成功", logfmt.Label(st.UID, st.Nickname))
+			msg = "签到成功"
 		}
 		// 分桶查余额：配置窗口内的积分单独标记，同时记录最早未来到期批次。
 		remain, total, expiring, earliestAt, earliestRemaining, err := s.cfg.Upstream.UserResourceDetailedWithExpiry(a, expiringSoon)
 		if err != nil {
 			log.Printf("user-resource %s: %v", logfmt.Label(st.UID, st.Nickname), err)
+			rep.Item(st.UID, st.Nickname, status, msg+"；余额查询失败", 0, 0)
 			continue
 		}
 		s.cfg.Pool.ReenableIfCredits(st.UID, remain, total)
 		s.cfg.Pool.SetCreditsDetailed(st.UID, remain, total, expiring, earliestAt, earliestRemaining)
+		rep.Item(st.UID, st.Nickname, status, fmt.Sprintf("%s；余额 %d / %d", msg, remain, total), 0, 0)
 	}
-	s.RunStreakBonusFor(only)
+	rep.End()
+	s.runStreakBonus(only, trigger)
 }
 
 // RunActivityNow 立即对池内所有可用账号执行一次对话活跃上报。
@@ -507,19 +522,19 @@ func (s *Scheduler) RunCheckinFor(only []string) {
 // code=0 OK，点亮连登）；一条上报同时点亮 growth 连登 + 解锁 first_buddy 任务。
 // 上报成功后续跑 streak 自检（checkActivityStreak）：回读连登天数，发现
 // 「上报 200 但 streak 没涨」的静默丢弃（只读 oracle，不做重试）。
-// RunActivityNow 是无 ctx 的外部入口（面板/测试一次性触发）；排程主循环走
-// runActivity（ctx 取消时立即放弃剩余账号，不等限速睡满）。
-func (s *Scheduler) RunActivityNow() {
-	s.runActivity(context.Background())
+func (s *Scheduler) RunActivityNow() { s.runActivityFor(context.Background(), nil, TriggerSchedule) }
+
+// runActivity 排程主循环入口，随 ctx 取消立即退出。
+func (s *Scheduler) runActivity(ctx context.Context) { s.runActivityFor(ctx, nil, TriggerSchedule) }
+
+// RunActivityFor 手动触发，只对 only 中的账号上报活跃（nil = 全部）。
+func (s *Scheduler) RunActivityFor(only []string) {
+	s.runActivityFor(context.Background(), only, TriggerManual)
 }
 
-// runActivity 活跃上报遍历，随 ctx 取消立即退出。
-func (s *Scheduler) runActivity(ctx context.Context) { s.runActivityFor(ctx, nil) }
-
-// RunActivityFor 只对 only 中的账号上报活跃（nil = 全部）。
-func (s *Scheduler) RunActivityFor(only []string) { s.runActivityFor(context.Background(), only) }
-
-func (s *Scheduler) runActivityFor(ctx context.Context, only []string) {
+func (s *Scheduler) runActivityFor(ctx context.Context, only []string, trigger string) {
+	rep := s.begin("activity", only, trigger)
+	defer rep.End()
 	first := true
 	includeDisabled := only != nil || s.includeDisabledInTasks()
 	for _, st := range s.listFor(only) {
@@ -528,22 +543,20 @@ func (s *Scheduler) runActivityFor(ctx context.Context, only []string) {
 		}
 		a := s.cfg.Pool.AuthByUID(st.UID)
 		if a == nil || a.AccessTokenValue() == "" {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "凭证缺少 access token", 0, 0)
 			continue
 		}
 		// 企业版跳过活跃上报：/v2/report 本身返回 200（不报错），但它唯一的作用是
-		// 点亮 growth 连登天数 / 解锁 first_buddy 领养——这两者对企业号都是 403
-		// （「growth system is only available for personal users」），即**零收益**。
-		// 该类"静默无效"最易被忽略（日志无异常），故显式跳过，不给上游多发一次请求。
+		// 点亮 growth 连登天数 / 解锁 first_buddy 领养——这两者对企业号都是 403，即**零收益**。
 		if a.IsEnterprise() {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "企业版没有成长体系", 0, 0)
 			continue
 		}
-		// global 账号同样上报（PR #45 实测国际版 /v2/report 在 workbuddy.ai 上 code=0 OK，
-		// 点亮连登）；realmBase 路由/头由 upstream.billingJSON/BillingHeaders 按 realm 切，
-		// 无需改动 upstream。此处曾按「D4 门控：global 无活跃体系」跳过 global，实测该
-		// 判断不成立——国际版 /v2/report 可用，跳过即国际版账号永远点不亮连登（上游
-		// a190252 同口径修复）。checkin/travel 的 global 门控不受影响，仍跳过。
+		// global 账号同样上报（PR #45 实测国际版 /v2/report 可用，点亮连登）；
+		// checkin/travel 的 global 门控不受影响，仍跳过。
 		if !first {
 			if !sleepCtx(ctx, activityAccountDelay) {
+				rep.Note("服务停止，剩余账号未上报")
 				return // 优雅停机：不等限速睡满，剩余账号下轮再报
 			}
 		}
@@ -551,9 +564,14 @@ func (s *Scheduler) runActivityFor(ctx context.Context, only []string) {
 		cid := fmt.Sprintf("wb2api-%d", time.Now().UnixMilli())
 		if err := s.cfg.Upstream.ReportChatActivity(a, cid, ""); err != nil {
 			log.Printf("activity %s: %v", logfmt.Label(a.UID, a.Nickname), err)
+			rep.Item(st.UID, st.Nickname, StatusFailed, errMsg("上报失败", err), 0, 0)
 			continue
 		}
-		s.checkActivityStreak(a) // 上报成功 → 回读 streak 自检
+		if s.checkActivityStreak(a) {
+			rep.Item(st.UID, st.Nickname, StatusOK, "已上报，但连登天数未确认", 0, 0)
+		} else {
+			rep.Item(st.UID, st.Nickname, StatusOK, "已上报，连登已点亮", 0, 0)
+		}
 	}
 }
 
@@ -562,7 +580,6 @@ func (s *Scheduler) runActivityFor(ctx context.Context, only []string) {
 // 上报 200 ≠ streak 计分——需要回读验证闭环。
 // 异常检测口径：days==0 → warn（report OK but streak.days=0 (silent drop?)）；
 // GET 失败 → warn 但不影响主流程（上报本身已成功，按天幂等，不做重试）。
-// 日志每号一行、一眼可 grep：`activity %s: streak days=%d`（成功也打，方便对账）。
 // 返回 true 表示「上报 OK 但 streak 可疑」（days==0 或回读失败），供测试断言。
 func (s *Scheduler) checkActivityStreak(a *auth.Auth) bool {
 	days, err := s.cfg.Upstream.GrowthStreak(a)
@@ -578,17 +595,20 @@ func (s *Scheduler) checkActivityStreak(a *auth.Auth) bool {
 	return false
 }
 
-// RunKeepaliveNow 立即对所有账号刷新 token；session 死亡的自动禁用。
+// RunKeepaliveNow 立即对所有账号刷新 token；session 死亡的自动禁用（定时触发）。
 // 禁用账号默认跳过；若 schedule.include_disabled_in_tasks 打开，禁用号也会续期 token
-// （这是轮换用法下把闲置号保持可用的关键），但**不再对已禁用的号重复计数 12153**——
-// 它已经是终态，再计一次只会打出一行「— 禁用」的误导日志。
+// （这是轮换用法下把闲置号保持可用的关键），但**不再对已禁用的号重复计数 12153**。
 // 12153 禁用走 Pool.NoteSessionDead 的**连续计数**语义：一次刷新失败不再立即杀号，
 // 连续 sessionDeadThreshold 次（3 次）才禁用（P0-1：13 个 disabled 号全是历史误判）。
 // 刷新成功 → ClearSessionDead 清计数（错误判定的账号有复活路径）。
-func (s *Scheduler) RunKeepaliveNow() { s.RunKeepaliveFor(nil) }
+func (s *Scheduler) RunKeepaliveNow() { s.runKeepalive(nil, TriggerSchedule) }
 
-// RunKeepaliveFor 同 RunKeepaliveNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
-func (s *Scheduler) RunKeepaliveFor(only []string) {
+// RunKeepaliveFor 手动触发，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunKeepaliveFor(only []string) { s.runKeepalive(only, TriggerManual) }
+
+func (s *Scheduler) runKeepalive(only []string, trigger string) {
+	rep := s.begin("keepalive", only, trigger)
+	defer rep.End()
 	includeDisabled := only != nil || s.includeDisabledInTasks()
 	for _, st := range s.listFor(only) {
 		if st.Disabled && !includeDisabled {
@@ -596,37 +616,50 @@ func (s *Scheduler) RunKeepaliveFor(only []string) {
 		}
 		a := s.cfg.Pool.AuthByUID(st.UID)
 		if a == nil || a.RefreshTokenValue() == "" {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "凭证缺少 refresh token", 0, 0)
 			continue
 		}
 		if err := s.cfg.Upstream.RefreshToken(a); err != nil {
 			log.Printf("keepalive %s: %v", logfmt.Label(st.UID, st.Nickname), err)
+			msg := errMsg("刷新失败", err)
 			var ue *upstream.Error
 			if errors.As(err, &ue) && ue.Kind == upstream.ErrSessionDead && !st.Disabled {
 				if s.cfg.Pool.NoteSessionDead(st.UID) {
 					log.Printf("keepalive %s: 连续 %d 次 12153 session dead — 禁用", logfmt.Label(st.UID, st.Nickname), pool.SessionDeadThreshold())
+					msg = fmt.Sprintf("登录态失效（连续 %d 次），已禁用", pool.SessionDeadThreshold())
 				}
 			}
+			rep.Item(st.UID, st.Nickname, StatusFailed, msg, 0, 0)
 			continue
 		}
 		s.cfg.Pool.ClearSessionDead(st.UID) // 刷新成功清误判计数，失败不该累计
 		if err := a.SaveAtomic(); err != nil {
 			log.Printf("keepalive %s save: %v", logfmt.Label(st.UID, st.Nickname), err)
+			rep.Item(st.UID, st.Nickname, StatusFailed, errMsg("已刷新，但凭证保存失败", err), 0, 0)
+			continue
 		}
+		rep.Item(st.UID, st.Nickname, StatusOK, "令牌已刷新", 0, 0)
 	}
 }
 
-// RunBalanceRefreshNow 并发查询余额并更新池内 credits。
+// RunBalanceRefreshNow 并发查询余额并更新池内 credits（后台周期任务，不记录执行历史）。
 // 账号范围：默认跳过禁用账号；schedule.include_disabled_in_tasks 打开时一并刷新
 // （轮换用法下据此判断下一个该启用谁）。注意 ReenableIfCredits 对 disabled 是
 // no-op，所以本开关**不会**导致禁用号被自动解冻——它只让已有账号的积分保持新鲜。
 // 解冻语义与签到一致（ReenableIfCredits：余额 > 0 的冷却账号自动解冻），
 // 但不做签到、不刷新 token——只让"积分"这个观测量保持新鲜。
-// 供两类入口复用：后台周期任务（StartBalanceRefresh）与面板手动全量刷新。
-func (s *Scheduler) RunBalanceRefreshNow() { s.RunBalanceRefreshFor(nil) }
+func (s *Scheduler) RunBalanceRefreshNow() { s.runBalanceRefresh(nil, nopReporter{}) }
 
-// RunBalanceRefreshFor 同 RunBalanceRefreshNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+// RunBalanceRefreshFor 手动触发（记录执行历史），只处理 only 中的账号（nil = 全部）。
 func (s *Scheduler) RunBalanceRefreshFor(only []string) {
+	rep := s.begin("balance", only, TriggerManual)
+	defer rep.End()
+	s.runBalanceRefresh(only, rep)
+}
+
+func (s *Scheduler) runBalanceRefresh(only []string, rep RunReporter) {
 	var wg sync.WaitGroup
+	var mu sync.Mutex // RunReporter 实现自身并发安全，这里只保护 nopReporter 之外的顺序无关写
 	expiringSoon := s.ExpiringSoonWindow()
 	includeDisabled := only != nil || s.includeDisabledInTasks()
 	for _, st := range s.listFor(only) {
@@ -638,16 +671,22 @@ func (s *Scheduler) RunBalanceRefreshFor(only []string) {
 			continue
 		}
 		wg.Add(1)
-		go func(a *auth.Auth, uid string) {
+		go func(a *auth.Auth, uid, nick string) {
 			defer wg.Done()
 			remain, total, expiring, earliestAt, earliestRemaining, err := s.cfg.Upstream.UserResourceDetailedWithExpiry(a, expiringSoon)
 			if err != nil {
 				log.Printf("balance %s: %v", logfmt.Label(uid, a.Nickname), err)
+				mu.Lock()
+				rep.Item(uid, nick, StatusFailed, errMsg("查询失败", err), 0, 0)
+				mu.Unlock()
 				return
 			}
 			s.cfg.Pool.ReenableIfCredits(uid, remain, total)
 			s.cfg.Pool.SetCreditsDetailed(uid, remain, total, expiring, earliestAt, earliestRemaining)
-		}(a, st.UID)
+			mu.Lock()
+			rep.Item(uid, nick, StatusOK, fmt.Sprintf("余额 %d / %d", remain, total), 0, 0)
+			mu.Unlock()
+		}(a, st.UID, st.Nickname)
 	}
 	wg.Wait()
 }

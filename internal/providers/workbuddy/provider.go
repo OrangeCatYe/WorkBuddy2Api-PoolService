@@ -17,7 +17,9 @@ import (
 
 	"github.com/orangeruan/poolservice/internal/core/account"
 	"github.com/orangeruan/poolservice/internal/core/provider"
+	"github.com/orangeruan/poolservice/internal/core/taskrun"
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/auth"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/growth"
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/livecfg"
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/pool"
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/redisstore"
@@ -39,7 +41,9 @@ type Provider struct {
 	started Settings // 启动时的配置，用于计算需重启才生效的改动
 	desired Settings // 面板最近保存的完整配置（含尚未生效的需重启字段）
 	live    *livecfg.Holder
-	reserve float64 // 积分中心设置的余额保底（>0 时覆盖 pool.credit_floor）
+	reserve float64           // 积分中心设置的余额保底（>0 时覆盖 pool.credit_floor）
+	runs    *taskrun.Recorder // 任务执行记录（SetTaskRecorder 注入；cfgMu 保护）
+	growth  *growth.Runner
 	pool    *pool.Pool
 	up      *upstream.Client
 	store   redisstore.Store
@@ -145,6 +149,16 @@ func New(cfg Settings) (*Provider, error) {
 		ActivityDisabled: !s.ActivityEnabled, KeepaliveDisabled: !s.KeepaliveEnabled,
 		BlackcatDisabled: !s.BlackcatEnabled, GrowthDisabled: !s.GrowthEnabled,
 		IncludeDisabledInTasks: s.IncludeDisabledInTasks,
+	})
+
+	p.growth = growth.New(pl, up)
+	// 成长任务时点（schedule.growth_hours）：扫描全部账号待办并执行；异步，已在执行时跳过。
+	p.sched.SetGrowthHook(func() {
+		go func() {
+			if err := p.runGrowthQueue(nil, scheduler.TriggerSchedule); err != nil {
+				log.Printf("[workbuddy] 定时成长任务：%v", err)
+			}
+		}()
 	})
 
 	p.usage = usage.New(cfg.stateSibling("usage.json"))

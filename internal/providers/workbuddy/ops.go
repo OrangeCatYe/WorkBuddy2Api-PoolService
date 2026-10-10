@@ -10,6 +10,8 @@ import (
 
 	"github.com/orangeruan/poolservice/internal/core/account"
 	"github.com/orangeruan/poolservice/internal/core/provider"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/growth"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy/engine/scheduler"
 )
 
 // ---- 额度 ----
@@ -35,10 +37,10 @@ func (p *Provider) RefreshQuota(ctx context.Context, uid string) (*account.Quota
 }
 
 // refreshPackages 拉取单账号积分包明细并缓存。
-func (p *Provider) refreshPackages(uid string) {
+func (p *Provider) refreshPackages(uid string) error {
 	a := p.pool.AuthByUID(uid)
 	if a == nil {
-		return
+		return fmt.Errorf("账号不存在")
 	}
 	items, _, _, err := p.up.CreditPackages(a)
 	p.pkgMu.Lock()
@@ -47,9 +49,10 @@ func (p *Provider) refreshPackages(uid string) {
 		prev := p.packages[uid]
 		prev.err = err.Error()
 		p.packages[uid] = prev // 失败保留上次明细
-		return
+		return err
 	}
 	p.packages[uid] = pkgSnapshot{items: items, at: time.Now()}
+	return nil
 }
 
 // packageLoop 周期刷新全部账号积分包明细（逐个、间隔发起，避免并发打上游）。
@@ -156,18 +159,19 @@ func (p *Provider) Do(ctx context.Context, uid, action string, _ map[string]stri
 func (p *Provider) Tasks() []provider.TaskDef {
 	s := p.settings().Schedule
 	return []provider.TaskDef{
-		{ID: "checkin", Name: "每日签到", Description: "签到领积分，并刷新余额、解冻已回血账号", Hours: s.CheckinHours, Enabled: s.CheckinEnabled},
+		{ID: "checkin", Name: "每日签到", Description: "签到领积分，并刷新余额、解冻已回血账号；完成后自动执行连登奖励", Hours: s.CheckinHours, Enabled: s.CheckinEnabled},
+		{ID: "growth", Name: "成长任务", Description: fmt.Sprintf("自动完成 %d 类成长任务并领奖", len(growth.Actions())), Hours: s.GrowthHours, Enabled: s.GrowthEnabled},
 		{ID: "activity", Name: "活跃上报", Description: "点亮连登，解锁首个伙伴", Hours: s.ActivityHours, Enabled: s.ActivityEnabled},
-		{ID: "travel", Name: "猫猫旅行", Description: "领养、派出、领奖", Hours: s.TravelHours, Enabled: s.TravelEnabled},
+		{ID: "travel", Name: "猫猫旅行", Description: "领养、派出、到站领奖", Hours: s.TravelHours, Enabled: s.TravelEnabled},
 		{ID: "keepalive", Name: "Token 保活", Description: "提前刷新访问令牌，避免过期掉线", Hours: s.KeepaliveHours, Enabled: s.KeepaliveEnabled},
-		{ID: "blackcat", Name: "夜猫子", Description: "23:00–08:00 窗口对话补足", Hours: s.BlackcatHours, Enabled: s.BlackcatEnabled},
-		{ID: "streak", Name: "连登奖励", Description: "连登管家兑换与抽奖", Enabled: s.CheckinEnabled},
-		{ID: "balance", Name: "余额刷新", Description: fmt.Sprintf("每 %d 分钟刷新余额", s.BalanceRefreshMinutes), Enabled: s.BalanceRefreshEnabled},
+		{ID: "blackcat", Name: "夜猫子", Description: "23:00–08:00 窗口内对话补足", Hours: s.BlackcatHours, Enabled: s.BlackcatEnabled},
+		{ID: "streak", Name: "连登奖励", Description: "补签、礼包、连登档位兑换与抽奖（随签到执行）", Hours: s.CheckinHours, Enabled: s.CheckinEnabled},
+		{ID: "balance", Name: "余额刷新", Description: fmt.Sprintf("每 %d 分钟刷新余额（定时刷新不记录历史）", s.BalanceRefreshMinutes), Enabled: s.BalanceRefreshEnabled},
 		{ID: "packages", Name: "积分包明细", Description: fmt.Sprintf("每 %d 分钟刷新到期分布", s.PackageRefreshMinutes), Enabled: true},
 	}
 }
 
-// RunTask 立即执行任务（异步，作用于全部账号；accountIDs 暂未使用）。
+// RunTask 立即执行任务（异步）。accountIDs 为空 = 全部账号；同一任务正在执行时拒绝。
 func (p *Provider) RunTask(_ context.Context, taskID string, accountIDs []string) error {
 	// only 为 nil 表示全部账号；指定账号时校验存在性，避免静默无操作。
 	var only []string
@@ -179,10 +183,18 @@ func (p *Provider) RunTask(_ context.Context, taskID string, accountIDs []string
 		}
 		only = accountIDs
 	}
+	if p.recorder().Running(ID, taskID) {
+		return ErrTaskRunning
+	}
 	var fn func()
 	switch taskID {
 	case "checkin":
 		fn = func() { p.sched.RunCheckinFor(only) }
+	case "growth":
+		if p.growth.QueueRunning() {
+			return growth.ErrRunning
+		}
+		fn = func() { _ = p.runGrowthQueue(only, scheduler.TriggerManual) }
 	case "activity":
 		fn = func() { p.sched.RunActivityFor(only) }
 	case "travel":
@@ -196,17 +208,7 @@ func (p *Provider) RunTask(_ context.Context, taskID string, accountIDs []string
 	case "balance":
 		fn = func() { p.sched.RunBalanceRefreshFor(only) }
 	case "packages":
-		fn = func() {
-			ids := only
-			if ids == nil {
-				for _, st := range p.pool.List() {
-					ids = append(ids, st.UID)
-				}
-			}
-			for _, id := range ids {
-				p.refreshPackages(id)
-			}
-		}
+		fn = func() { p.refreshPackagesRecorded(only) }
 	default:
 		return fmt.Errorf("unknown task %q", taskID)
 	}
@@ -221,4 +223,37 @@ func (p *Provider) RunTask(_ context.Context, taskID string, accountIDs []string
 		log.Printf("[workbuddy] 任务 %s 完成，用时 %s", taskID, time.Since(start).Round(time.Millisecond))
 	}()
 	return nil
+}
+
+// refreshPackagesRecorded 手动刷新积分包明细并记录结果。
+func (p *Provider) refreshPackagesRecorded(only []string) {
+	rep := p.beginRun("packages", scheduler.TriggerManual, len(only))
+	defer rep.End()
+	ids := only
+	if ids == nil {
+		for _, st := range p.pool.List() {
+			if !st.Disabled {
+				ids = append(ids, st.UID)
+			}
+		}
+	}
+	for _, id := range ids {
+		err := p.refreshPackages(id)
+		nick := ""
+		if a := p.pool.AuthByUID(id); a != nil {
+			nick = a.Nickname
+		}
+		if err != nil {
+			rep.Item(id, nick, scheduler.StatusFailed, "刷新失败："+err.Error(), 0, 0)
+			continue
+		}
+		p.pkgMu.RLock()
+		snap := p.packages[id]
+		p.pkgMu.RUnlock()
+		var sum int64
+		for _, it := range snap.items {
+			sum += it.Remain
+		}
+		rep.Item(id, nick, scheduler.StatusOK, fmt.Sprintf("%d 个积分包，剩余 %d", len(snap.items), sum), 0, 0)
+	}
 }

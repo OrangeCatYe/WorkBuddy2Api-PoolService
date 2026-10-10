@@ -46,98 +46,108 @@ func travelDay(t time.Time) string {
 // 领奖 + 领养前置上报），不发模型对话，与「让位防风控」不冲突；
 // 401/查询失败只跳过该账号本轮（不强刷 token，交 22:00 keepalive）；
 // 账号间限速 travelAccountDelay。
-func (s *Scheduler) RunTravelNow() { s.RunTravelFor(nil) }
+func (s *Scheduler) RunTravelNow() { s.runTravel(nil, TriggerSchedule) }
 
-// RunTravelFor 同 RunTravelNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
-func (s *Scheduler) RunTravelFor(only []string) {
+// RunTravelFor 手动触发，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunTravelFor(only []string) { s.runTravel(only, TriggerManual) }
+
+func (s *Scheduler) runTravel(only []string, trigger string) {
+	rep := s.begin("travel", only, trigger)
+	defer rep.End()
 	first := true
 	for _, st := range s.listFor(only) {
-		if st.Disabled {
+		if st.Disabled && only == nil {
 			continue
 		}
 		a := s.cfg.Pool.AuthByUID(st.UID)
 		if a == nil || a.RefreshTokenValue() == "" {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "凭证缺少 refresh token", 0, 0)
 			continue
 		}
 		if a.IsGlobal() {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "国际版没有猫猫旅行", 0, 0)
 			continue // D4 门控：global 无 CN 任务体系，不发起任何上游调用
 		}
 		if a.IsEnterprise() {
+			rep.Item(st.UID, st.Nickname, StatusSkipped, "企业版没有成长体系", 0, 0)
 			continue // 企业版门控：无成长体系（/activity/growth/* 上游一律 403），不发起任何上游调用
 		}
 		if !first {
 			time.Sleep(travelAccountDelay)
 		}
 		first = false
-		s.travelOne(a)
+		status, msg, credit := s.travelOne(a)
+		rep.Item(st.UID, st.Nickname, status, msg, float64(credit), 0)
 	}
 }
 
 // travelOne 单账号单趟状态机：查有无猫 + 查状态 + 最多一个动作，不轮询不等待。
-func (s *Scheduler) travelOne(a *auth.Auth) {
+func (s *Scheduler) travelOne(a *auth.Auth) (status, msg string, credit int64) {
 	buddy, err := s.cfg.Upstream.BuddyInfo(a)
 	if err != nil {
 		log.Printf("travel %s: buddy-info: %v", logfmt.Label(a.UID, a.Nickname), err)
-		return
+		return StatusFailed, errMsg("查询伙伴失败", err), 0
 	}
 	if buddy == nil {
-		s.travelAdopt(a)
-		return
+		return s.travelAdopt(a)
 	}
 	ts, err := s.cfg.Upstream.TravelStatus(a)
 	if err != nil {
 		log.Printf("travel %s: status: %v", logfmt.Label(a.UID, a.Nickname), err)
-		return
+		return StatusFailed, errMsg("查询旅行状态失败", err), 0
 	}
 	switch ts.State {
 	case travelStateArrived:
-		s.travelClaim(a, ts)
+		return s.travelClaim(a, ts)
 	case travelStateIdle:
-		s.travelDepart(a, ts)
+		return s.travelDepart(a, ts)
 	case travelStateTraveling:
 		log.Printf("travel %s: skip (traveling record=%d)", logfmt.Label(a.UID, a.Nickname), ts.RecordID)
+		return StatusSkipped, "旅行中，下次到站后领奖", 0
 	default:
 		log.Printf("travel %s: skip (unknown state %q)", logfmt.Label(a.UID, a.Nickname), ts.State)
+		return StatusSkipped, fmt.Sprintf("未知状态 %q", ts.State), 0
 	}
 }
 
 // travelDepart 空闲且未达当日上限时派出（每日 1 次，自然日 00:00 CST 重置）。
-func (s *Scheduler) travelDepart(a *auth.Auth, ts *upstream.TravelState) {
+func (s *Scheduler) travelDepart(a *auth.Auth, ts *upstream.TravelState) (string, string, int64) {
 	if ts.DailyLimitReached {
 		log.Printf("travel %s: skip (daily limit reached)", logfmt.Label(a.UID, a.Nickname))
-		return
+		return StatusSkipped, "今日旅行次数已用完", 0
 	}
 	if err := s.cfg.Upstream.TravelDepart(a, travelLocationID); err != nil {
 		log.Printf("travel %s: depart: %v", logfmt.Label(a.UID, a.Nickname), err)
-		return
+		return StatusFailed, errMsg("派出失败", err), 0
 	}
 	log.Printf("travel %s: depart ok location=%d", logfmt.Label(a.UID, a.Nickname), travelLocationID)
+	return StatusOK, "已派出旅行", 0
 }
 
 // travelClaim 到站领奖（必须带 record_id）。
-func (s *Scheduler) travelClaim(a *auth.Auth, ts *upstream.TravelState) {
+func (s *Scheduler) travelClaim(a *auth.Auth, ts *upstream.TravelState) (string, string, int64) {
 	if ts.RecordID == 0 {
 		log.Printf("travel %s: claim skipped (arrived but no record_id)", logfmt.Label(a.UID, a.Nickname))
-		return
+		return StatusSkipped, "已到站但缺少旅行记录", 0
 	}
 	reward, err := s.cfg.Upstream.TravelClaim(a, ts.RecordID)
 	if err != nil {
 		log.Printf("travel %s: claim record=%d: %v", logfmt.Label(a.UID, a.Nickname), ts.RecordID, err)
-		return
+		return StatusFailed, errMsg("领奖失败", err), 0
 	}
 	log.Printf("travel %s: claim ok record=%d reward=%d", logfmt.Label(a.UID, a.Nickname), ts.RecordID, reward)
+	return StatusOK, fmt.Sprintf("到站领奖 +%d", reward), reward
 }
 
 // travelAdopt 无猫时领养，链路：report → agreement → buddy/first。
 //
 // report 必须先跑（scripts/task_first_buddy.py 实测）：一条 chat_request_send 上报
 // 点亮 growth 连登并**解锁 first_buddy 任务**；未上报时 buddy/first 会返回
-// 400 "first_buddy task not completed yet"——该门槛的真实来源是"当日无活跃上报"，
-// 不是账号问题（report.go 注释亦明确「解锁 first_buddy 任务（领养前置）」）。
+// 400 "first_buddy task not completed yet"——该门槛的真实来源是"当日无活跃上报"。
 // conversation 门槛未达标仍属预期行为，记一次当日已试后静默跳过，不再重试。
-func (s *Scheduler) travelAdopt(a *auth.Auth) {
+func (s *Scheduler) travelAdopt(a *auth.Auth) (string, string, int64) {
 	if s.adoptTriedToday(a.UID) {
-		return
+		return StatusSkipped, "今日已尝试领养，门槛未达", 0
 	}
 	// 前置：解锁 first_buddy 任务（幂等；失败不阻塞，让 buddy/first 按既有错误路径暴露）。
 	if err := s.cfg.Upstream.ReportChatActivity(a, fmt.Sprintf("wb2api-adopt-%d", time.Now().UnixMilli()), ""); err != nil {
@@ -147,17 +157,20 @@ func (s *Scheduler) travelAdopt(a *auth.Auth) {
 	}
 	if err := s.cfg.Upstream.BuddyAgreement(a); err != nil {
 		log.Printf("travel %s: agreement: %v", logfmt.Label(a.UID, a.Nickname), err)
-		return
+		return StatusFailed, errMsg("同意伙伴协议失败", err), 0
 	}
 	err := s.cfg.Upstream.BuddyFirst(a)
 	switch {
 	case err == nil:
 		log.Printf("travel %s: adopt ok (+300 credits)", logfmt.Label(a.UID, a.Nickname))
+		return StatusOK, "领养第一只伙伴 +300", 300
 	case upstream.IsBuddyTaskIncomplete(err):
 		s.markAdoptTried(a.UID)
 		log.Printf("travel %s: adopt skipped (conversation threshold not reached, retry tomorrow)", logfmt.Label(a.UID, a.Nickname))
+		return StatusSkipped, "领养门槛未达（需要当日活跃），明天重试", 0
 	default:
 		log.Printf("travel %s: adopt: %v", logfmt.Label(a.UID, a.Nickname), err)
+		return StatusFailed, errMsg("领养失败", err), 0
 	}
 }
 

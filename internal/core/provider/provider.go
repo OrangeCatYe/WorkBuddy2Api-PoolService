@@ -279,11 +279,13 @@ func MetaWithCaps(p Provider) Meta {
 	_, ops := p.(AccountOps)
 	_, tasks := p.(TaskCapable)
 	_, settings := p.(SettingsCapable)
+	_, quests := p.(QuestCapable)
 	add(CapChat, chat)
 	add(CapQuota, quota)
 	add(CapLogin, login)
 	add(CapAccountOps, ops)
 	add(CapTasks, tasks)
 	add(CapSettings, settings)
+	add(CapQuests, quests)
 	return m
 }
