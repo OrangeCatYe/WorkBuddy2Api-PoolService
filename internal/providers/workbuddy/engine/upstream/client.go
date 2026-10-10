@@ -1263,6 +1263,7 @@ func (c *Client) FetchModels(a *auth.Auth) ([]ModelInfo, error) {
 		log.Printf("WARN: [upstream] fetch models: enterprise endpoint failed (v3/config only): %v", enterprise.err)
 	}
 	out := mergeModelInfos(v3.infos, enterprise.infos)
+	out = reconcileOutputLimits(out, enterprise.infos)
 	if len(out) == 0 {
 		return nil, fmt.Errorf("models api returned empty list")
 	}
@@ -1285,6 +1286,37 @@ func (c *Client) FetchModels(a *auth.Auth) ([]ModelInfo, error) {
 	// 按探测账号的 realm 写入对应桶：CN 探测只进 cn 桶，global 同模型名不被污染（C-2）。
 	c.storeEfforts(a.Realm(), cache, defCache)
 	return out, nil
+}
+
+// reconcileOutputLimits 校正 maxOutputTokens（2026-10-10 实测两路目录对照）：
+//
+//   - 上下文（maxInputTokens）以 /v3/config 为准：企业端点给 hy4-preview 的 960000
+//     偏小，实测 98 万、101 万 token 输入都能通过；hy3 实测 19 万通过、21 万被拒，
+//     与两路一致的 192000 吻合。contextWindow.defaultLength（30 万）只是客户端默认
+//     档位，API 不强制。
+//   - 输出上限两路常不一致，/v3/config 偏大且有不合理值（kimi-k3-1 输出 1048576 大于
+//     上下文 1M，minimax-m3 输出 524288 大于上下文 512000）。下游 Agent 按
+//     「上下文 − 输出预留」计算可用输入，输出值不小于上下文时可用输入变成 0 或负数。
+//     企业端点（agents.cli，CLI 实际使用的口径）给的值与 ttswitch 自带的腾讯模型目录一致，
+//     因此两路都有时取较小值。
+//   - 兜底：仍不小于上下文时压到上下文的一半。
+func reconcileOutputLimits(merged, enterprise []ModelInfo) []ModelInfo {
+	ent := make(map[string]int64, len(enterprise))
+	for _, mi := range enterprise {
+		if mi.MaxTokens > 0 {
+			ent[mi.ID] = mi.MaxTokens
+		}
+	}
+	for i := range merged {
+		m := &merged[i]
+		if v, ok := ent[m.ID]; ok && (m.MaxTokens <= 0 || v < m.MaxTokens) {
+			m.MaxTokens = v
+		}
+		if m.ContextWindow > 0 && m.MaxTokens >= m.ContextWindow {
+			m.MaxTokens = m.ContextWindow / 2
+		}
+	}
+	return merged
 }
 
 // mergeModelInfos 合并两路模型目录：primary 为主（同 id 以 primary 条目为准——

@@ -634,8 +634,9 @@ func TestFetchModelsOverlaysV3ConfigCapabilities(t *testing.T) {
 		t.Fatalf("infos=%+v", infos)
 	}
 	mi := infos[0]
-	if mi.MaxTokens != 393216 {
-		t.Errorf("MaxTokens=%d want 393216", mi.MaxTokens)
+	// 能力字段以 v3 为准，输出上限取两路较小值（v3 393216 / 企业端点 128000）。
+	if mi.MaxTokens != 128000 {
+		t.Errorf("MaxTokens=%d want 128000", mi.MaxTokens)
 	}
 	if mi.ContextWindow != 1000000 {
 		t.Errorf("ContextWindow=%d want 1000000", mi.ContextWindow)
