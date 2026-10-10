@@ -1,5 +1,6 @@
-// Package mock 开发联调用 Provider：内存账号 + 回显式聊天，不访问任何上游。
-package mock
+package gateway
+
+// 测试替身：内存账号 + 回显式聊天，不访问任何上游，只在 gateway 包的测试中使用。
 
 import (
 	"context"
@@ -14,14 +15,14 @@ import (
 	"github.com/orangeruan/poolservice/internal/core/provider"
 )
 
-// Provider mock 实现。
-type Provider struct {
+// fakeProvider 测试用平台（ID 为 mock）。
+type fakeProvider struct {
 	mu       sync.Mutex
 	accounts []account.Account
 }
 
-// New 创建带 3 个示例账号的 mock Provider。
-func New() *Provider {
+// newFakeProvider 创建带 3 个示例账号的测试平台。
+func newFakeProvider() *fakeProvider {
 	now := time.Now()
 	in := func(d time.Duration) *time.Time { t := now.Add(d); return &t }
 	mk := func(id, label string, remain, total float64, pk []account.Package) account.Account {
@@ -30,7 +31,7 @@ func New() *Provider {
 			Quota: &account.Quota{Unit: "credit", Remaining: remain, Total: total, Packages: pk, UpdatedAt: now},
 		}
 	}
-	return &Provider{accounts: []account.Account{
+	return &fakeProvider{accounts: []account.Account{
 		mk("m1", "演示账号 A", 1800, 3000, []account.Package{
 			{Name: "签到奖励", Source: "checkin", Amount: 500, Remaining: 300, ExpireAt: in(36 * time.Hour)},
 			{Name: "新手礼包", Source: "gift", Amount: 2500, Remaining: 1500, ExpireAt: in(20 * 24 * time.Hour)},
@@ -43,7 +44,7 @@ func New() *Provider {
 }
 
 // Meta 元信息。
-func (p *Provider) Meta() provider.Meta {
+func (p *fakeProvider) Meta() provider.Meta {
 	return provider.Meta{
 		ID: "mock", Name: "Mock", Description: "开发联调用的模拟平台，不访问任何上游",
 		Icon: "flask",
@@ -51,7 +52,7 @@ func (p *Provider) Meta() provider.Meta {
 }
 
 // Accounts 账号快照。
-func (p *Provider) Accounts() []account.Account {
+func (p *fakeProvider) Accounts() []account.Account {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	out := make([]account.Account, len(p.accounts))
@@ -66,7 +67,7 @@ func (p *Provider) Accounts() []account.Account {
 }
 
 // Models 模型目录。
-func (p *Provider) Models(context.Context) ([]provider.Model, error) {
+func (p *fakeProvider) Models(context.Context) ([]provider.Model, error) {
 	return []provider.Model{
 		{ID: "mock-echo", DisplayName: "Mock Echo", ContextWindow: 128000, MaxOutputTokens: 8192,
 			SupportsTools: true, CreditRate: 0, CreditRateText: "x0"},
@@ -78,7 +79,7 @@ func (p *Provider) Models(context.Context) ([]provider.Model, error) {
 }
 
 // ServeChat 回显最后一条 user 消息。
-func (p *Provider) ServeChat(ctx context.Context, req *provider.ChatRequest, w http.ResponseWriter) provider.ChatOutcome {
+func (p *fakeProvider) ServeChat(ctx context.Context, req *provider.ChatRequest, w http.ResponseWriter) provider.ChatOutcome {
 	var body struct {
 		Messages []struct {
 			Role    string `json:"role"`

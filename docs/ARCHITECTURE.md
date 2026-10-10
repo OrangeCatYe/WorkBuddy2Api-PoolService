@@ -23,7 +23,6 @@ package "PoolService（单二进制）" {
   }
   package "providers" {
     [workbuddy] as WB
-    [mock] as Mock
     [未来: cursor / kiro ...] as Future
   }
 }
@@ -37,7 +36,6 @@ Router --> Strategy
 Strategy --> Ledger
 Router --> Reg
 Reg --> WB
-Reg --> Mock
 Reg ..> Future
 GW --> Obs
 Sched --> Reg
@@ -68,7 +66,6 @@ internal/
   panelapi/             面板 REST API
   providers/
     workbuddy/          WorkBuddy 适配器（迁入原项目协议层）
-    mock/               开发与测试用
   webui/                go:embed 前端产物
 web/                    前端源码（React + TS + Vite）
 docs/                   文档

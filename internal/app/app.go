@@ -20,7 +20,6 @@ import (
 	"github.com/orangeruan/poolservice/internal/gateway"
 	"github.com/orangeruan/poolservice/internal/httpx"
 	"github.com/orangeruan/poolservice/internal/panelapi"
-	"github.com/orangeruan/poolservice/internal/providers/mock"
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy"
 	"github.com/orangeruan/poolservice/internal/store/keys"
 	"github.com/orangeruan/poolservice/internal/store/requests"
@@ -40,10 +39,6 @@ type App struct {
 	runs    *taskrun.Recorder
 }
 
-type toggle struct {
-	Enabled bool `json:"enabled"`
-}
-
 // New 根据配置装配应用。
 func New(cfg *config.Config) (*App, error) {
 	a := &App{reg: provider.NewRegistry()}
@@ -60,16 +55,6 @@ func New(cfg *config.Config) (*App, error) {
 			return nil, err
 		}
 		if err := a.reg.Register(wb); err != nil {
-			return nil, err
-		}
-	}
-
-	var mk toggle
-	if err := cfg.ProviderConfig("mock", &mk); err != nil {
-		return nil, fmt.Errorf("providers.mock: %w", err)
-	}
-	if mk.Enabled {
-		if err := a.reg.Register(mock.New()); err != nil {
 			return nil, err
 		}
 	}

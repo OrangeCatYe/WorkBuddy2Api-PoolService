@@ -12,13 +12,12 @@ import (
 	"github.com/orangeruan/poolservice/internal/config"
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
-	"github.com/orangeruan/poolservice/internal/providers/mock"
 )
 
 func newTestGateway(t *testing.T) (*Gateway, *http.ServeMux) {
 	t.Helper()
 	reg := provider.NewRegistry()
-	if err := reg.Register(mock.New()); err != nil {
+	if err := reg.Register(newFakeProvider()); err != nil {
 		t.Fatal(err)
 	}
 	cfg := config.Default()

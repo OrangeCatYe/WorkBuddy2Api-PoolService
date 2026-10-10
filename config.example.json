@@ -38,7 +38,6 @@
       "global": { "enabled": true },
       "prompt": { "mode": "passthrough" },
       "session_sticky": { "enabled": true, "ttl": "30m" }
-    },
-    "mock": { "enabled": false }
+    }
   }
 }

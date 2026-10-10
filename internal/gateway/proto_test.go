@@ -12,7 +12,6 @@ import (
 	"github.com/orangeruan/poolservice/internal/config"
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
-	"github.com/orangeruan/poolservice/internal/providers/mock"
 	"github.com/orangeruan/poolservice/internal/store/keys"
 	"github.com/orangeruan/poolservice/internal/store/requests"
 )
@@ -249,7 +248,7 @@ func TestSinkErrors(t *testing.T) {
 
 func newStoreGateway(t *testing.T) (*http.ServeMux, *keys.Store, *requests.Recorder) {
 	reg := provider.NewRegistry()
-	_ = reg.Register(mock.New())
+	_ = reg.Register(newFakeProvider())
 	cfg := config.Default()
 	cfg.Gateway.LegacyAPIKey = "k"
 	g := New(func() *config.Config { return cfg }, reg, router.NewCatalog(reg, 0), nil)

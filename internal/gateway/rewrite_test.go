@@ -11,7 +11,6 @@ import (
 	"github.com/orangeruan/poolservice/internal/config"
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
-	"github.com/orangeruan/poolservice/internal/providers/mock"
 )
 
 func TestRewriterSSEModelEchoAndUsage(t *testing.T) {
@@ -80,7 +79,7 @@ func TestRewriterErrorPassthrough(t *testing.T) {
 
 func TestModelsCreditSuffix(t *testing.T) {
 	reg := provider.NewRegistry()
-	_ = reg.Register(mock.New())
+	_ = reg.Register(newFakeProvider())
 	cfg := config.Default()
 	cfg.Gateway.LegacyAPIKey = "k"
 	cfg.Gateway.CreditInModelName = true

@@ -76,5 +76,5 @@ Provider 直接向 `w` 写出 OpenAI Chat Completions 格式（SSE 或 JSON）�
 
 ## 8. 参考实现
 
-- `internal/providers/mock`：最小实现，只有 `Provider` + `ChatCapable`
+- `internal/gateway/fakeprovider_test.go`：最小实现，只有 `Provider` + `ChatCapable`（网关测试用的替身，不编进程序）
 - `internal/providers/workbuddy`：完整实现，全部能力

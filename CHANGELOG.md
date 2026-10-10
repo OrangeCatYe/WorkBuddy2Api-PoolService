@@ -2,6 +2,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.3] - 2026-10-10
+
+### 移除
+- 开发联调用的 `mock` 平台（3 个演示账号与 `mock-echo` / `mock-think` 两个模型），不再编进程序，`providers.mock` 配置项随之删除。旧配置里留着这一段不会报错，会被忽略
+- 网关测试改用 `internal/gateway/fakeprovider_test.go` 中的测试替身
+
 ## [0.6.2] - 2026-10-10
 
 ### 修复
