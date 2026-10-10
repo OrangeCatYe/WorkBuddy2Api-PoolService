@@ -151,7 +151,7 @@ ttswitch 解析字段（含别名）与本项目输出：
 | P2 | `feat/workbuddy-provider` | 迁入原项目协议层为 WorkBuddy 适配器；添加账号、账号运维、任务、倍率模型名 | v0.2.0 ✅ |
 | P3 | `feat/gateway` | 多协议入口（`/v1/messages`、`/v1/responses`）、下游 API Key、请求日志、用量分析 | v0.3.0 ✅ |
 | P4 | `feat/credits` | 积分账本与预测、积分中心、到期优先选号策略、选号回放 | v0.4.0 ✅ |
-| P5 | `feat/panel` | 概览整合积分与用量、账号筛选与批量操作、平台参数设置页、窄屏适配（积分中心 / 用量 / 日志 / 接入向导已在 P3、P4 完成） | v0.5.0 |
+| P5 | `feat/panel` | 概览整合积分与用量、账号筛选与批量操作、平台参数设置页、窄屏适配（积分中心 / 用量 / 日志 / 接入向导已在 P3、P4 完成） | v0.5.0 ✅ |
 | P6 | `feat/automation` | 成长任务中心迁移、任务执行记录 | v0.6.0 |
 | P7 | `chore/release` | GitHub Actions 发布 Windows / Linux 二进制、迁移工具 | v1.0.0 |
 

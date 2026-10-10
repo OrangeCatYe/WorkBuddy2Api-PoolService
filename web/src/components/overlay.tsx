@@ -16,7 +16,7 @@ export function Dialog({ open, onClose, title, children, footer, width = 480 }: 
   useEsc(open, onClose)
   if (!open) return null
   return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-center p-6">
+    <div className="fixed inset-0 z-50 grid place-items-center p-3 sm:p-6">
       <div className="absolute inset-0 animate-fade bg-ink/30 backdrop-blur-[2px]" onClick={onClose} />
       <div role="dialog" className="relative w-full animate-rise rounded-2xl border border-line bg-surface shadow-pop" style={{ maxWidth: width }}>
         <div className="flex items-center justify-between px-5 pb-2 pt-4">
@@ -49,7 +49,7 @@ export function Drawer({ open, onClose, title, subtitle, children }: { open: boo
             <X size={16} />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
       </aside>
     </div>,
     document.body,
@@ -102,7 +102,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastCtx.Provider value={push}>
       {children}
       {createPortal(
-        <div className="pointer-events-none fixed bottom-5 right-5 z-[60] flex w-[340px] flex-col gap-2">
+        <div className="pointer-events-none fixed bottom-5 right-4 z-[60] flex w-[min(340px,calc(100vw-2rem))] flex-col gap-2 sm:right-5">
           {items.map((t) => (
             <div key={t.id} className="pointer-events-auto flex animate-rise items-start gap-2.5 rounded-xl border border-line bg-surface px-4 py-3 text-[13px] shadow-pop">
               {t.tone === 'ok' ? <CheckCircle2 size={16} className="mt-px shrink-0 text-ok" /> : <XCircle size={16} className="mt-px shrink-0 text-bad" />}

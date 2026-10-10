@@ -11,7 +11,9 @@ PoolService 用 Provider 适配器对接各类 AI 编程助手。不同平台的
 | `QuotaCapable` | 否 | 账号「刷新余额」、积分中心 |
 | `LoginCapable` | 否 | 「添加账号」对话框里的登录方式 |
 | `AccountOps` | 否 | 账号详情与批量操作按钮 |
-| `TaskCapable` | 否 | 任务页的任务卡片 |
+| `TaskCapable` | 否 | 任务页的任务卡片；账号页批量栏的「执行任务」菜单 |
+| `SettingsCapable` | 否 | 设置页的平台参数标签页 |
+| `RoutingTunable` | 否 | 积分中心的选号策略对该平台生效 |
 | `Starter` | 否 | 启动 / 停止后台协程（刷新、持久化） |
 
 定义见 `internal/core/provider/provider.go`。未实现的能力，面板自动隐藏对应入口。
@@ -43,11 +45,26 @@ PoolService 用 Provider 适配器对接各类 AI 编程助手。不同平台的
 
 Provider 直接向 `w` 写出 OpenAI Chat Completions 格式（SSE 或 JSON）。网关在外层负责 `model` 回显、`usage` 采集和日志，Provider 不需要处理。
 
-## 5. 注册
+## 5. 任务
+
+`RunTask(ctx, taskID, accountIDs)`：`accountIDs` 为空表示全部账号，非空时只处理这些账号（面板在账号页勾选后从批量栏触发）。指定账号时建议同时处理已禁用的账号，因为是用户明确选中的。
+
+## 6. 平台参数
+
+实现 `SettingsCapable` 后，面板会为该平台生成一个设置标签页，不需要写前端代码：
+
+- `SettingsSchema()` 声明参数。`Key` 是 `providers.<id>` 配置段内的点分路径，`Kind` 决定控件：`bool` 开关、`int / float` 数字框（带 `Min / Max / Unit`）、`duration` 时长（如 `30m`）、`hours` 24 格整点选择、`select` 分段或下拉、`text`、`secret`（不回显）。`Group` 分组，`EnabledBy` 指定依赖的开关，`Restart` 标记需要重启才生效。
+- `SettingsRaw()` 返回已保存的完整配置段（含默认值）。
+- `ApplySettings(raw)` 校验整段新配置，校验失败时不得修改任何运行状态；通过后热应用能即时生效的字段。
+- `PendingRestart()` 返回已保存但需重启才生效的 Key，面板据此显示提醒。
+
+面板只提交改过的字段。核心层按 schema 校验类型和范围（schema 外的 Key 一律拒绝），合并进配置段后交给 `ApplySettings`，成功才写回 `config.json`。
+
+## 7. 注册
 
 在 `internal/app/app.go` 中解析 `providers.<id>` 配置段并 `reg.Register(...)`。注册顺序就是优先级：多个平台提供同名模型时，短名指向先注册的平台，其余平台的同名模型以 `平台/模型` 全名出现。
 
-## 6. 参考实现
+## 8. 参考实现
 
 - `internal/providers/mock`：最小实现，只有 `Provider` + `ChatCapable`
 - `internal/providers/workbuddy`：完整实现，全部能力

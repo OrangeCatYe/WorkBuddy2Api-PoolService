@@ -447,10 +447,13 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 // 旅行已从签到剥离为独立排程（travel_hours），不再搭签到便车。
 // 末尾追加连登管家（streak.go）：可兑换档位自动兑换 + 抽奖次数自动抽完——
 // 连登兑换按天数解锁，挂在每日签到后即「到天数那天自动完成兑换→抽奖闭环」。
-func (s *Scheduler) RunCheckinNow() {
+func (s *Scheduler) RunCheckinNow() { s.RunCheckinFor(nil) }
+
+// RunCheckinFor 同 RunCheckinNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunCheckinFor(only []string) {
 	expiringSoon := s.ExpiringSoonWindow()
-	includeDisabled := s.includeDisabledInTasks()
-	for _, st := range s.cfg.Pool.List() {
+	includeDisabled := only != nil || s.includeDisabledInTasks()
+	for _, st := range s.listFor(only) {
 		if st.Disabled && !includeDisabled {
 			continue
 		}
@@ -494,7 +497,7 @@ func (s *Scheduler) RunCheckinNow() {
 		s.cfg.Pool.ReenableIfCredits(st.UID, remain, total)
 		s.cfg.Pool.SetCreditsDetailed(st.UID, remain, total, expiring, earliestAt, earliestRemaining)
 	}
-	s.RunStreakBonusNow()
+	s.RunStreakBonusFor(only)
 }
 
 // RunActivityNow 立即对池内所有可用账号执行一次对话活跃上报。
@@ -511,10 +514,15 @@ func (s *Scheduler) RunActivityNow() {
 }
 
 // runActivity 活跃上报遍历，随 ctx 取消立即退出。
-func (s *Scheduler) runActivity(ctx context.Context) {
+func (s *Scheduler) runActivity(ctx context.Context) { s.runActivityFor(ctx, nil) }
+
+// RunActivityFor 只对 only 中的账号上报活跃（nil = 全部）。
+func (s *Scheduler) RunActivityFor(only []string) { s.runActivityFor(context.Background(), only) }
+
+func (s *Scheduler) runActivityFor(ctx context.Context, only []string) {
 	first := true
-	includeDisabled := s.includeDisabledInTasks()
-	for _, st := range s.cfg.Pool.List() {
+	includeDisabled := only != nil || s.includeDisabledInTasks()
+	for _, st := range s.listFor(only) {
 		if st.Disabled && !includeDisabled {
 			continue
 		}
@@ -577,9 +585,12 @@ func (s *Scheduler) checkActivityStreak(a *auth.Auth) bool {
 // 12153 禁用走 Pool.NoteSessionDead 的**连续计数**语义：一次刷新失败不再立即杀号，
 // 连续 sessionDeadThreshold 次（3 次）才禁用（P0-1：13 个 disabled 号全是历史误判）。
 // 刷新成功 → ClearSessionDead 清计数（错误判定的账号有复活路径）。
-func (s *Scheduler) RunKeepaliveNow() {
-	includeDisabled := s.includeDisabledInTasks()
-	for _, st := range s.cfg.Pool.List() {
+func (s *Scheduler) RunKeepaliveNow() { s.RunKeepaliveFor(nil) }
+
+// RunKeepaliveFor 同 RunKeepaliveNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunKeepaliveFor(only []string) {
+	includeDisabled := only != nil || s.includeDisabledInTasks()
+	for _, st := range s.listFor(only) {
 		if st.Disabled && !includeDisabled {
 			continue
 		}
@@ -611,11 +622,14 @@ func (s *Scheduler) RunKeepaliveNow() {
 // 解冻语义与签到一致（ReenableIfCredits：余额 > 0 的冷却账号自动解冻），
 // 但不做签到、不刷新 token——只让"积分"这个观测量保持新鲜。
 // 供两类入口复用：后台周期任务（StartBalanceRefresh）与面板手动全量刷新。
-func (s *Scheduler) RunBalanceRefreshNow() {
+func (s *Scheduler) RunBalanceRefreshNow() { s.RunBalanceRefreshFor(nil) }
+
+// RunBalanceRefreshFor 同 RunBalanceRefreshNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunBalanceRefreshFor(only []string) {
 	var wg sync.WaitGroup
 	expiringSoon := s.ExpiringSoonWindow()
-	includeDisabled := s.includeDisabledInTasks()
-	for _, st := range s.cfg.Pool.List() {
+	includeDisabled := only != nil || s.includeDisabledInTasks()
+	for _, st := range s.listFor(only) {
 		if st.Disabled && !includeDisabled {
 			continue
 		}
@@ -685,4 +699,23 @@ func (s *Scheduler) SetBalanceInterval(d time.Duration) {
 	}
 	s.balanceInterval.Store(int64(d))
 	poke(s.rearmBalance)
+}
+
+// listFor 账号快照，only 非 nil 时只保留其中的账号。
+func (s *Scheduler) listFor(only []string) []pool.Status {
+	all := s.cfg.Pool.List()
+	if only == nil {
+		return all
+	}
+	set := make(map[string]bool, len(only))
+	for _, u := range only {
+		set[u] = true
+	}
+	out := make([]pool.Status, 0, len(only))
+	for _, st := range all {
+		if set[st.UID] {
+			out = append(out, st)
+		}
+	}
+	return out
 }

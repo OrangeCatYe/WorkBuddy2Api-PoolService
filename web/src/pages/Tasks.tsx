@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { CalendarClock, Clock, Loader2, Play } from 'lucide-react'
+import { ArrowUpRight, CalendarClock, Clock, Loader2, Play } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { post } from '@/lib/api'
 import { useProviderDetails } from '@/lib/queries'
 import { useToast } from '@/components/overlay'
@@ -28,7 +29,17 @@ export function TasksPage() {
     <div className="space-y-6">
       {details.map((d) => (
         <Card key={d.meta.id}>
-          <CardHeader title={d.meta.name} hint="定时规则在配置文件中调整；这里可立即手动执行一次（作用于全部账号）" />
+          <CardHeader
+            title={d.meta.name}
+            hint="在这里对全部账号立即执行一次；只想对部分账号执行，可在账号页勾选后从底部操作栏选择任务"
+            actions={
+              d.meta.capabilities?.includes('settings') && (
+                <Link to={`/settings?tab=${d.meta.id}`} className="inline-flex items-center gap-1 text-[12.5px] font-medium text-muted hover:text-accent">
+                  调整执行时间 <ArrowUpRight size={13} />
+                </Link>
+              )
+            }
+          />
           <ul className="grid gap-px overflow-hidden rounded-b-2xl border-t border-line bg-line sm:grid-cols-2">
             {d.tasks!.map((t) => {
               const key = `${d.meta.id}/${t.id}`

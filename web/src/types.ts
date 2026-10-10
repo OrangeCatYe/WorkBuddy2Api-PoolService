@@ -334,3 +334,26 @@ export interface Decision {
   reason: string
   candidates?: { account_id: string; label: string; weight: number; bias: number; share: number; tier: number; note?: string }[]
 }
+
+export type SettingKind = 'bool' | 'int' | 'float' | 'duration' | 'hours' | 'select' | 'text' | 'secret'
+
+export interface SettingField {
+  key: string
+  label: string
+  hint?: string
+  group: string
+  kind: SettingKind
+  options?: { value: string; label: string }[]
+  min?: number
+  max?: number
+  unit?: string
+  restart?: boolean
+  enabled_by?: string
+}
+
+export interface ProviderSettings {
+  fields: SettingField[]
+  values: Record<string, unknown>
+  secrets_set: string[]
+  pending_restart: string[]
+}

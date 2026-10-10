@@ -4,6 +4,7 @@ package panelapi
 import (
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/orangeruan/poolservice/internal/config"
@@ -30,6 +31,8 @@ type API struct {
 	keys    *keys.Store
 	reqs    *requests.Recorder
 	credits *credits.Service
+
+	settingsMu sync.Mutex // 串行化平台参数的读改写
 }
 
 // New 创建。
@@ -48,6 +51,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerSettingsRoutes(mux)
 	a.registerGatewayRoutes(mux)
 	a.registerCreditsRoutes(mux)
+	a.registerProviderSettingsRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {

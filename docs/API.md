@@ -71,3 +71,15 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 ## 请求日志
 
 每个请求记录模型、账号、密钥、token、积分、耗时与状态，**不记录提示词与回答正文**。内存保留最近 5000 条供面板查询，同时按日写入 `data/requests/requests-YYYY-MM-DD.jsonl`，保留 30 天。
+
+## 平台管理接口
+
+面板使用的管理接口需要 `admin_key`（请求头 `Authorization: Bearer <admin_key>`）。以下两组可用于脚本化运维：
+
+| 接口 | 说明 |
+|---|---|
+| `POST /api/providers/{pid}/tasks/{task}/run` | 立即执行任务。请求体 `{"account_ids": [...]}` 可选，省略时作用于全部账号 |
+| `GET /api/providers/{pid}/settings` | 平台参数：`fields`（声明）、`values`（已保存值，密钥不回显）、`pending_restart` |
+| `PUT /api/providers/{pid}/settings` | 修改参数，只提交改动项：`{"values": {"pool.max_in_flight": 4}}`；校验失败返回 400 且不改动任何状态 |
+
+积分相关接口见 [CREDITS.md](CREDITS.md)。

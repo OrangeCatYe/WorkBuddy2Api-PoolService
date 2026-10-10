@@ -21,6 +21,7 @@ const (
 	CapLogin      Capability = "login"       // 添加账号
 	CapAccountOps Capability = "account_ops" // 账号运维动作
 	CapTasks      Capability = "tasks"       // 定时任务 / 成长任务
+	CapSettings   Capability = "settings"    // 面板可修改平台参数
 )
 
 // Meta Provider 元信息。
@@ -277,10 +278,12 @@ func MetaWithCaps(p Provider) Meta {
 	_, login := p.(LoginCapable)
 	_, ops := p.(AccountOps)
 	_, tasks := p.(TaskCapable)
+	_, settings := p.(SettingsCapable)
 	add(CapChat, chat)
 	add(CapQuota, quota)
 	add(CapLogin, login)
 	add(CapAccountOps, ops)
 	add(CapTasks, tasks)
+	add(CapSettings, settings)
 	return m
 }
