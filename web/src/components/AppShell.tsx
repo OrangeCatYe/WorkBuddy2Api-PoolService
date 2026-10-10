@@ -138,8 +138,8 @@ export function AppShell() {
         </nav>
         <ProviderDock />
         <div className="flex items-center justify-between px-4 text-[12px] text-faint">
-          <span className="num flex items-center gap-1">
-            <BookOpen size={13} /> v{meta?.version ?? '—'}
+          <span className="num flex min-w-0 items-center gap-1 truncate" title={meta?.version}>
+<BookOpen size={13} /> v{meta?.version?.replace(/^v/, '') ?? '—'}
           </span>
           <button onClick={toggle} className="rounded-md p-1.5 hover:bg-sunken hover:text-ink" aria-label="切换主题">
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}

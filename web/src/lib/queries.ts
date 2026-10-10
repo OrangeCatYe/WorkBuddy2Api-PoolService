@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Account, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail } from '@/types'
+import type { Account, ApiKey, ConnectInfo, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, RequestEntry, UsageStats } from '@/types'
 
 export const useMeta = () => useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/api/meta'), staleTime: 60_000 })
 
@@ -42,3 +42,19 @@ export function useProviderDetails() {
 
 export const useGatewaySettings = () =>
   useQuery({ queryKey: ['settings', 'gateway'], queryFn: () => api<GatewaySettings>('/api/settings/gateway') })
+
+export const useKeys = () =>
+  useQuery({ queryKey: ['keys'], queryFn: () => api<{ keys: ApiKey[] }>('/api/keys'), select: (d) => d.keys, refetchInterval: 10_000 })
+
+export const useConnect = () => useQuery({ queryKey: ['connect'], queryFn: () => api<ConnectInfo>('/api/connect'), staleTime: 300_000 })
+
+export const useRequests = (params: Record<string, string>, live: boolean) =>
+  useQuery({
+    queryKey: ['requests', params],
+    queryFn: () => api<{ requests: RequestEntry[] }>(`/api/requests?${new URLSearchParams(params)}`),
+    select: (d) => d.requests,
+    refetchInterval: live ? 3000 : false,
+  })
+
+export const useUsageStats = (hours: number) =>
+  useQuery({ queryKey: ['usage', hours], queryFn: () => api<UsageStats>(`/api/usage/stats?hours=${hours}`), refetchInterval: 15_000 })

@@ -149,7 +149,7 @@ ttswitch 解析字段（含别名）与本项目输出：
 | P0 | `main` | 需求、架构文档、仓库骨架 | v0.0 ✅ |
 | P1 | `feat/core-skeleton` | Go 模块、核心接口、配置、HTTP 骨架、前端骨架与 embed | v0.1.0 ✅ |
 | P2 | `feat/workbuddy-provider` | 迁入原项目协议层为 WorkBuddy 适配器；添加账号、账号运维、任务、倍率模型名 | v0.2.0 ✅ |
-| P3 | `feat/gateway` | 多协议入口（`/v1/messages`、`/v1/responses`）、下游 API Key、请求日志 | v0.3.0 |
+| P3 | `feat/gateway` | 多协议入口（`/v1/messages`、`/v1/responses`）、下游 API Key、请求日志、用量分析 | v0.3.0 ✅ |
 | P4 | `feat/credit-ledger` | 积分账本、指标、增强选号策略 | v0.4.0 |
 | P5 | `feat/panel` | 积分中心、用量分析、请求日志、接入向导等其余视图 | v0.5.0 |
 | P6 | `feat/automation` | 成长任务中心迁移、任务执行记录 | v0.6.0 |

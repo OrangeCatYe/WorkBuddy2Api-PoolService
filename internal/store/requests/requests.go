@@ -266,6 +266,20 @@ func (r *Recorder) Query(f Filter) []Entry {
 	return out
 }
 
+// SumKey 汇总内存中某个 Key 的全部记录（内置密钥不进 Key 存储，用它展示用量）。
+func (r *Recorder) SumKey(id string) (b Bucket, last time.Time) {
+	for _, e := range r.snapshot() {
+		if e.KeyID != id {
+			continue
+		}
+		if last.IsZero() {
+			last = e.Time
+		}
+		b.add(e)
+	}
+	return b, last
+}
+
 // Bucket 统计桶。
 type Bucket struct {
 	Key              string  `json:"key"`

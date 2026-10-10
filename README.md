@@ -7,7 +7,9 @@
 ## 功能
 
 - **多平台框架**：平台以适配器接入，登录方式、账号操作、定时任务由适配器声明，面板自动渲染。当前支持 WorkBuddy（国内版 / 国际版）。
-- **OpenAI 兼容网关**：`/v1/models`、`/v1/chat/completions`；模型能力字段与 ttswitch 对齐，思考强度五档自动映射。
+- **多协议网关**：OpenAI Chat Completions、Anthropic Messages、OpenAI Responses 三种入口，ttswitch、Claude Code、Codex CLI 都能直接接入；模型能力字段与 ttswitch 对齐，思考强度五档自动映射。
+- **下游密钥**：按密钥限制模型、RPM 与每日 / 累计积分，独立统计用量。
+- **请求日志与用量分析**：每个请求的账号、token、缓存命中、积分、耗时一目了然（不记录对话内容）。
 - **模型名显示积分倍率**：可选在模型名后附加倍率，如 `glm-5.2(x0.05)`，在 Agent 里直接看到成本。
 - **账号池**：沿用原项目的冷却、熔断、会话粘性、快过期积分优先等策略；签到、保活、猫猫旅行等定时任务。
 - **Web 面板**：概览、账号（批量操作、积分包到期）、模型目录、任务、设置；明暗主题。
@@ -69,6 +71,31 @@ scripts/build.sh
 | API 格式 | Chat Completions |
 
 拉取模型列表后，上下文长度、最大输出、图片输入、工具调用、思考档位会自动识别。思考强度按 ttswitch 的 `low / medium / high / xhigh / max` 发送，网关映射到模型实际支持的档位，并在响应头 `X-Reasoning-Effort-Applied` 中给出实际档位。
+
+## 接入 Claude Code / Codex CLI
+
+面板「接入与密钥」页提供可直接复制的配置片段。简要说明：
+
+```bash
+# Claude Code（Anthropic Messages）
+export ANTHROPIC_BASE_URL="http://127.0.0.1:7863"
+export ANTHROPIC_AUTH_TOKEN="sk-pool-..."
+export ANTHROPIC_MODEL="glm-5.2"
+```
+
+```toml
+# Codex CLI（~/.codex/config.toml，Responses 协议）
+model = "glm-5.2"
+model_provider = "poolservice"
+
+[model_providers.poolservice]
+name = "PoolService"
+base_url = "http://127.0.0.1:7863/v1"
+wire_api = "responses"
+env_key = "POOLSVC_API_KEY"
+```
+
+协议转换的能力边界见 [docs/API.md](docs/API.md)。
 
 ## 从 workbuddy2api-panel 迁移
 

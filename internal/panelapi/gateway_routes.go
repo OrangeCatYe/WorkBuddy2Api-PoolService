@@ -35,8 +35,17 @@ type keyView struct {
 func (a *API) listKeys(w http.ResponseWriter, _ *http.Request) {
 	out := []keyView{}
 	if legacy := a.cfg().Gateway.LegacyAPIKey; legacy != "" {
-		out = append(out, keyView{Key: keys.Key{ID: "legacy", Name: "配置文件密钥", Secret: legacy, Enabled: true,
-			Note: "来自 config.json 的 gateway.legacy_api_key，不受限额约束，只能在配置文件中修改"}, Builtin: true})
+		v := keyView{Key: keys.Key{ID: "legacy", Name: "配置文件密钥", Secret: legacy, Enabled: true,
+			Note: "来自 config.json 的 gateway.legacy_api_key，不受限额约束，只能在配置文件中修改"}, Builtin: true}
+		if a.reqs != nil {
+			b, last := a.reqs.SumKey("legacy")
+			v.Usage = keys.Usage{Requests: b.Requests, Failures: b.Failures, PromptTokens: b.PromptTokens,
+				CompletionTokens: b.CompletionTokens, CachedTokens: b.CachedTokens, Credit: b.Credit}
+			if !last.IsZero() {
+				v.Usage.LastUsedAt = &last
+			}
+		}
+		out = append(out, v)
 	}
 	if a.keys != nil {
 		for _, k := range a.keys.List() {

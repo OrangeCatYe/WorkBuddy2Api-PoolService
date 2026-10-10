@@ -144,3 +144,104 @@ export interface ModelEntry {
   credits?: string
   tags?: string[]
 }
+
+export interface KeyUsage {
+  requests: number
+  failures: number
+  prompt_tokens: number
+  completion_tokens: number
+  cached_tokens: number
+  credit: number
+  day?: string
+  day_credit: number
+  day_requests: number
+  last_used_at?: string
+}
+
+export interface ApiKey {
+  id: string
+  name: string
+  secret: string
+  enabled: boolean
+  created_at: string
+  expires_at?: string
+  note?: string
+  models?: string[]
+  rpm?: number
+  credit_budget?: number
+  daily_credit_budget?: number
+  usage: KeyUsage
+  builtin?: boolean
+}
+
+export interface KeySpec {
+  name: string
+  enabled?: boolean
+  expires_at?: string | null
+  note: string
+  models: string[]
+  rpm: number
+  credit_budget: number
+  daily_credit_budget: number
+}
+
+export type Protocol = 'chat' | 'messages' | 'responses'
+
+export interface RequestEntry {
+  id: string
+  time: string
+  protocol: Protocol
+  key_id?: string
+  key_name?: string
+  provider?: string
+  account_id?: string
+  model?: string
+  requested_model?: string
+  stream: boolean
+  effort?: string
+  effort_requested?: string
+  status: number
+  ok: boolean
+  error_kind?: string
+  error?: string
+  attempts?: number
+  prompt_tokens: number
+  completion_tokens: number
+  cached_tokens: number
+  reasoning_tokens?: number
+  credit: number
+  has_credit?: boolean
+  ttfb_ms: number
+  duration_ms: number
+  client_ip?: string
+  user_agent?: string
+}
+
+export interface UsageBucket {
+  key: string
+  requests: number
+  failures: number
+  prompt_tokens: number
+  completion_tokens: number
+  cached_tokens: number
+  credit: number
+  avg_ttfb_ms: number
+}
+
+export interface UsageStats {
+  since: string
+  total: UsageBucket
+  series: UsageBucket[]
+  by_model: UsageBucket[]
+  by_key: UsageBucket[]
+  by_account: UsageBucket[]
+  by_protocol: UsageBucket[]
+}
+
+export interface ConnectInfo {
+  base_url: string
+  openai: string
+  anthropic: string
+  listen: string
+  has_legacy: boolean
+}
