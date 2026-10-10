@@ -17,6 +17,7 @@ import (
 	"github.com/orangeruan/poolservice/internal/httpx"
 	"github.com/orangeruan/poolservice/internal/panelapi"
 	"github.com/orangeruan/poolservice/internal/providers/mock"
+	"github.com/orangeruan/poolservice/internal/providers/workbuddy"
 	"github.com/orangeruan/poolservice/internal/webui"
 )
 
@@ -36,6 +37,21 @@ type toggle struct {
 func New(cfg *config.Config) (*App, error) {
 	a := &App{reg: provider.NewRegistry()}
 	a.cfg.Store(cfg)
+
+	// WorkBuddy：未配置时按默认值启用（providers.workbuddy.enabled=false 关闭）。
+	wbs, err := workbuddy.ParseSettings(cfg.Providers[workbuddy.ID], cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	if wbs.Enabled {
+		wb, err := workbuddy.New(wbs)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.reg.Register(wb); err != nil {
+			return nil, err
+		}
+	}
 
 	var mk toggle
 	if err := cfg.ProviderConfig("mock", &mk); err != nil {
@@ -64,6 +80,8 @@ func New(cfg *config.Config) (*App, error) {
 		Addr:              cfg.Listen,
 		Handler:           mux,
 		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       300 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	return a, nil
 }
@@ -72,13 +90,20 @@ func New(cfg *config.Config) (*App, error) {
 func (a *App) Registry() *provider.Registry { return a.reg }
 
 // Run 启动 Provider 后台任务与 HTTP 服务，直到 ctx 取消。
+// 退出顺序：先优雅关闭 HTTP（等在途请求结束），再逆序停止 Provider 并落盘。
 func (a *App) Run(ctx context.Context) error {
+	var started []provider.Starter
+	defer func() {
+		for i := len(started) - 1; i >= 0; i-- {
+			started[i].Stop()
+		}
+	}()
 	for _, p := range a.reg.List() {
 		if s, ok := p.(provider.Starter); ok {
 			if err := s.Start(ctx); err != nil {
 				return fmt.Errorf("start provider %s: %w", p.Meta().ID, err)
 			}
-			defer s.Stop()
+			started = append(started, s)
 		}
 	}
 	errCh := make(chan error, 1)

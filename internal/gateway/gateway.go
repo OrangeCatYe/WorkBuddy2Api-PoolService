@@ -2,11 +2,16 @@
 package gateway
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/orangeruan/poolservice/internal/config"
 	"github.com/orangeruan/poolservice/internal/core/provider"
@@ -71,9 +76,10 @@ func (g *Gateway) healthz(w http.ResponseWriter, r *http.Request) {
 
 func (g *Gateway) models(w http.ResponseWriter, r *http.Request) {
 	entries := g.catalog.Entries(r.Context())
+	gc := g.cfg().Gateway
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"object": "list",
-		"data":   ModelEntries(entries, g.cfg().Gateway.ModelNaming),
+		"data":   ModelEntries(entries, NamingOptions{Style: gc.ModelNaming, CreditSuffix: gc.CreditInModelName}),
 	})
 }
 
@@ -84,7 +90,9 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var obj map[string]any
-	if err := json.Unmarshal(body, &obj); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&obj); err != nil || obj == nil {
 		httpx.WriteOpenAIError(w, http.StatusBadRequest, "invalid_json", "request body is not valid JSON", 0)
 		return
 	}
@@ -142,7 +150,53 @@ func (g *Gateway) chat(w http.ResponseWriter, r *http.Request) {
 		Header:          r.Header,
 	}
 	w.Header().Set("X-Request-Id", req.RequestID)
-	chat.ServeChat(r.Context(), req, w)
+	rw := newRespRewriter(w, reqModel)
+	outcome := chat.ServeChat(r.Context(), req, rw)
+	rw.Finish()
+	if outcome.Status == 0 {
+		outcome.Status = rw.status
+	}
+	if !outcome.HasUsage && rw.hasUsage {
+		outcome.Usage, outcome.HasUsage = rw.usage, true
+	}
+	if outcome.ErrorMsg == "" {
+		outcome.ErrorMsg = rw.errMsg
+	}
+	if outcome.TTFB == 0 {
+		outcome.TTFB = rw.ttfb
+	}
+	logChat(req, entry.Provider, outcome, time.Since(rw.started))
+}
+
+// logChat 输出一行请求摘要（P5 起接入请求日志存储）。
+func logChat(req *provider.ChatRequest, prov string, o provider.ChatOutcome, dur time.Duration) {
+	u := o.Usage
+	credit := "-"
+	if u.HasCredit {
+		credit = strconv.FormatFloat(u.Credit, 'f', -1, 64)
+	}
+	line := fmt.Sprintf("[gateway] %s %s/%s status=%d stream=%v effort=%s in=%d out=%d cached=%d credit=%s ttfb=%s dur=%s",
+		req.RequestID, prov, req.Model, o.Status, req.Stream, orDash(req.ReasoningEffort),
+		u.PromptTokens, u.CompletionTokens, u.CachedTokens, credit,
+		o.TTFB.Round(time.Millisecond), dur.Round(time.Millisecond))
+	if o.ErrorMsg != "" {
+		line += " err=" + truncate(o.ErrorMsg, 160)
+	}
+	log.Print(line)
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
+}
+
+func truncate(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n]) + "…"
+	}
+	return s
 }
 
 func pickEffort(obj map[string]any) string {

@@ -165,23 +165,25 @@ func (e ErrUnknownModel) Error() string { return fmt.Sprintf("model %q not found
 // Resolve 把客户端模型名解析为目录条目。
 func (c *Catalog) Resolve(ctx context.Context, name string) (Entry, error) {
 	c.ensureFresh(ctx)
-	k := strings.ToLower(strings.TrimSpace(name))
+	if e, ok := c.lookup(name); ok {
+		return e, nil
+	}
+	// 目录可能过期（新模型上线）：强刷一次再试。
+	c.Refresh(ctx)
+	if e, ok := c.lookup(name); ok {
+		return e, nil
+	}
+	return Entry{}, ErrUnknownModel{Name: name}
+}
+
+// lookup 先按原名，再按去掉积分倍率标记后的名字查找。
+func (c *Catalog) lookup(name string) (Entry, bool) {
 	c.mu.RLock()
-	idxs := c.byName[k]
-	var e Entry
-	if len(idxs) > 0 {
-		e = c.entries[idxs[0]]
-	}
-	c.mu.RUnlock()
-	if len(idxs) == 0 {
-		// 目录可能过期（新模型上线）：强刷一次再试。
-		c.Refresh(ctx)
-		c.mu.RLock()
-		defer c.mu.RUnlock()
-		if idxs = c.byName[k]; len(idxs) == 0 {
-			return Entry{}, ErrUnknownModel{Name: name}
+	defer c.mu.RUnlock()
+	for _, n := range []string{name, StripCreditSuffix(name)} {
+		if idxs := c.byName[strings.ToLower(strings.TrimSpace(n))]; len(idxs) > 0 {
+			return c.entries[idxs[0]], true
 		}
-		return c.entries[idxs[0]], nil
 	}
-	return e, nil
+	return Entry{}, false
 }

@@ -9,13 +9,19 @@ import (
 // modelCreated /v1/models 的固定 created 时间戳（OpenAI 字段，客户端只做展示）。
 const modelCreated = 1760000000
 
+// NamingOptions /v1/models 命名选项。
+type NamingOptions struct {
+	Style        string // short / full / both
+	CreditSuffix bool   // ID 与显示名附加积分倍率
+}
+
 // ModelEntries 把目录转换为 /v1/models 条目。
 //
 // 字段同时满足 OpenAI 规范与 ttswitch 解析（services/model_fetch.rs）：
 // display_name、context_window、max_output_tokens、input_modalities、
 // supports_tools、reasoning_levels 是 ttswitch 识别的规范名；
 // context_length、name、reasoning_efforts 作为通用别名一并输出。
-func ModelEntries(entries []router.Entry, naming string) []map[string]any {
+func ModelEntries(entries []router.Entry, opt NamingOptions) []map[string]any {
 	// 短名冲突检测：同一短名只给优先级最高者（entries 已按注册顺序）。
 	shortOwner := map[string]int{}
 	for i, e := range entries {
@@ -28,7 +34,7 @@ func ModelEntries(entries []router.Entry, naming string) []map[string]any {
 	for i, e := range entries {
 		var ids []string
 		short := shortOwner[strings.ToLower(e.Model.ID)] == i
-		switch naming {
+		switch opt.Style {
 		case "full":
 			ids = []string{e.FullID()}
 		case "both":
@@ -44,27 +50,31 @@ func ModelEntries(entries []router.Entry, naming string) []map[string]any {
 			}
 		}
 		for _, id := range ids {
-			out = append(out, modelEntry(id, e))
+			out = append(out, modelEntry(id, e, opt.CreditSuffix))
 		}
 	}
 	return out
 }
 
-func modelEntry(id string, e router.Entry) map[string]any {
+func modelEntry(id string, e router.Entry, creditSuffix bool) map[string]any {
 	m := e.Model
-	entry := map[string]any{
-		"id":       id,
-		"object":   "model",
-		"created":  modelCreated,
-		"owned_by": e.Provider,
-		"provider": e.Provider,
-	}
 	name := m.DisplayName
 	if name == "" {
 		name = m.ID
 	}
-	entry["display_name"] = name
-	entry["name"] = name
+	if creditSuffix && m.CreditRateText != "" {
+		id = router.DecorateCredit(id, m.CreditRateText)
+		name = name + " (" + m.CreditRateText + ")"
+	}
+	entry := map[string]any{
+		"id":           id,
+		"object":       "model",
+		"created":      modelCreated,
+		"owned_by":     e.Provider,
+		"provider":     e.Provider,
+		"display_name": name,
+		"name":         name,
+	}
 	if m.Description != "" {
 		entry["description"] = m.Description
 	}
@@ -103,6 +113,11 @@ func modelEntry(id string, e router.Entry) map[string]any {
 	}
 	if len(m.Tags) > 0 {
 		entry["tags"] = m.Tags
+	}
+	for _, k := range []string{"promo_label", "promo_note", "list_credit_rate", "realm"} {
+		if v, ok := m.Extra[k]; ok {
+			entry[k] = v
+		}
 	}
 	return entry
 }

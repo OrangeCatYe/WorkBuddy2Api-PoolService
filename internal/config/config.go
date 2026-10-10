@@ -55,6 +55,9 @@ type GatewayConfig struct {
 	// ModelNaming /v1/models 输出风格：short（短名，默认）/ full（provider/model）/ both
 	ModelNaming string   `json:"model_naming"`
 	CatalogTTL  Duration `json:"catalog_ttl"`
+	// CreditInModelName 模型 ID / 显示名末尾附加积分倍率，如 glm-5.2(x0.05)。
+	// 带后缀和不带后缀的名字都能请求；倍率变化后旧名仍可解析。
+	CreditInModelName bool `json:"credit_in_model_name"`
 	// LegacyAPIKey 兼容旧版单密钥；P3 起推荐改用下游 API Key 管理
 	LegacyAPIKey string `json:"legacy_api_key,omitempty"`
 	// AllowAnonymous 未配置任何下游 Key 时是否放行（默认 false：必须带 Key）
