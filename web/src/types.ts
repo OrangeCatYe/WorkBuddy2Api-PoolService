@@ -357,3 +357,62 @@ export interface ProviderSettings {
   secrets_set: string[]
   pending_restart: string[]
 }
+
+export type RunItemStatus = 'pending' | 'running' | 'ok' | 'skipped' | 'error'
+export type RunStatus = 'running' | 'ok' | 'partial' | 'failed' | 'skipped'
+
+export interface TaskRunItem {
+  account_id: string
+  account?: string
+  code?: string
+  title?: string
+  status: RunItemStatus
+  message?: string
+  credit?: number
+  energy?: number
+  started_at?: string
+  ended_at?: string
+}
+
+export interface TaskRunSummary {
+  total: number
+  ok: number
+  skipped: number
+  failed: number
+  pending: number
+  credit: number
+  energy: number
+}
+
+export interface TaskRun {
+  id: string
+  provider: string
+  task: string
+  task_name: string
+  trigger: 'schedule' | 'manual'
+  scope: number
+  status: RunStatus
+  note?: string
+  started_at: string
+  ended_at?: string
+  summary: TaskRunSummary
+  items?: TaskRunItem[]
+}
+
+export type QuestStatus = 'locked' | 'todo' | 'claimable' | 'claimed'
+
+export interface Quest {
+  code: string
+  title: string
+  description?: string
+  credit?: number
+  energy?: number
+  current: number
+  target: number
+  status: QuestStatus
+  accepted: boolean
+  tag?: string
+  auto: boolean
+  auto_desc?: string
+  attempt?: boolean
+}

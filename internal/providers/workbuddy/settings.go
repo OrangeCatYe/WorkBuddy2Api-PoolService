@@ -53,6 +53,8 @@ type Settings struct {
 		BalanceRefreshMinutes  int   `json:"balance_refresh_minutes"`
 		// PackageRefreshMinutes 积分包明细（到期分布）刷新周期，缺省 30。
 		PackageRefreshMinutes int `json:"package_refresh_minutes"`
+		// GrowthConcurrency 成长任务队列的账号并发数（1-4），缺省 1。
+		GrowthConcurrency int `json:"growth_concurrency"`
 	} `json:"schedule"`
 
 	Global struct {
@@ -153,6 +155,7 @@ func DefaultSettings() Settings {
 	c.Schedule.BalanceRefreshEnabled = true
 	c.Schedule.BalanceRefreshMinutes = 5
 	c.Schedule.PackageRefreshMinutes = 30
+	c.Schedule.GrowthConcurrency = 1
 	c.Upstream.TimeoutSeconds = 120
 	c.Global.Enabled = true
 	c.Features.SanitizeBlacklistFingerprints = true
@@ -312,8 +315,10 @@ func (c *Settings) normalize() error {
 	}
 	if c.Schedule.PackageRefreshMinutes <= 0 {
 		c.Schedule.PackageRefreshMinutes = 30
+		c.Schedule.GrowthConcurrency = 1
 	}
 	c.packageRefresh = time.Duration(c.Schedule.PackageRefreshMinutes) * time.Minute
+	c.Schedule.GrowthConcurrency = max(1, min(4, c.Schedule.GrowthConcurrency))
 
 	switch m := strings.ToLower(strings.TrimSpace(c.Prompt.Mode)); m {
 	case "", "passthrough":

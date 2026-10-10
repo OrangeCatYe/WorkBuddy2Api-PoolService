@@ -80,6 +80,13 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 |---|---|
 | `POST /api/providers/{pid}/tasks/{task}/run` | 立即执行任务。请求体 `{"account_ids": [...]}` 可选，省略时作用于全部账号 |
 | `GET /api/providers/{pid}/settings` | 平台参数：`fields`（声明）、`values`（已保存值，密钥不回显）、`pending_restart` |
+| `GET /api/task-runs` | 执行历史，可按 `provider`、`task`、`status`（`running / ok / partial / failed / skipped`）筛选，`limit` 最大 500 |
+| `GET /api/task-runs/latest` | 每个任务最近一次执行的摘要 |
+| `GET /api/task-runs/{id}` | 单次执行详情，含逐账号结果 |
+| `GET /api/providers/{pid}/accounts/{aid}/quests` | 账号的成长任务与进度 |
+| `POST /api/providers/{pid}/accounts/{aid}/quests/run` | 自动完成任务，请求体 `{"codes": [...]}` 可选，省略为全部待办；返回 `run_id` |
+| `POST /api/providers/{pid}/accounts/{aid}/quests/{code}/claim` | 领取奖励 |
+| `POST /api/providers/{pid}/accounts/{aid}/quests/accept` | 接受全部未接受的任务 |
 | `PUT /api/providers/{pid}/settings` | 修改参数，只提交改动项：`{"values": {"pool.max_in_flight": 4}}`；校验失败返回 400 且不改动任何状态 |
 
 积分相关接口见 [CREDITS.md](CREDITS.md)。

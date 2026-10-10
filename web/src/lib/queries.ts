@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, RequestEntry, UsageStats } from '@/types'
+import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, Quest, RequestEntry, TaskRun, UsageStats } from '@/types'
 
 export const useMeta = () => useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/api/meta'), staleTime: 60_000 })
 
@@ -71,3 +71,33 @@ export const useDecisions = (live: boolean) =>
 
 export const useProviderSettings = (pid: string) =>
   useQuery({ queryKey: ['provider-settings', pid], queryFn: () => api<ProviderSettings>(`/api/providers/${encodeURIComponent(pid)}/settings`), enabled: !!pid })
+
+export const useTaskRuns = (params: Record<string, string>) =>
+  useQuery({
+    queryKey: ['task-runs', params],
+    queryFn: () => api<{ runs: TaskRun[] }>(`/api/task-runs?${new URLSearchParams(params)}`),
+    select: (d) => d.runs,
+    refetchInterval: 5000,
+  })
+
+export const useLatestRuns = () =>
+  useQuery({ queryKey: ['task-runs', 'latest'], queryFn: () => api<{ latest: Record<string, TaskRun> }>('/api/task-runs/latest'), select: (d) => d.latest, refetchInterval: 5000 })
+
+/** 单次执行详情；运行中每 2 秒刷新，结束后停止。 */
+export const useTaskRun = (id?: string | null) =>
+  useQuery({
+    queryKey: ['task-run', id],
+    queryFn: () => api<TaskRun>(`/api/task-runs/${encodeURIComponent(id!)}`),
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data && q.state.data.ended_at ? false : 2000),
+  })
+
+export const useQuests = (pid?: string, aid?: string, enabled = true) =>
+  useQuery({
+    queryKey: ['quests', pid, aid],
+    queryFn: () => api<{ quests: Quest[] }>(`/api/providers/${encodeURIComponent(pid!)}/accounts/${encodeURIComponent(aid!)}/quests`),
+    select: (d) => d.quests,
+    enabled: !!pid && !!aid && enabled,
+    staleTime: 30_000,
+    retry: false,
+  })

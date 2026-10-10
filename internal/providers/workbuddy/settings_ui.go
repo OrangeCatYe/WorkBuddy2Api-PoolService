@@ -78,7 +78,8 @@ var settingsSchema = func() []provider.SettingField {
 	out = append(out, task("activity", "活跃上报", "维持连续活跃天数")...)
 	out = append(out, task("keepalive", "保活", "刷新登录态，防止凭证过期")...)
 	out = append(out, task("blackcat", "夜猫子", "夜间活跃任务")...)
-	out = append(out, task("growth", "成长任务", "成长体系的每日任务")...)
+	out = append(out, task("growth", "成长任务", "扫描全部账号的成长任务并自动完成、领奖；小程序链每天零点解锁一环")...)
+	out = append(out, by(withRange(f("schedule.growth_concurrency", "成长任务并发账号数", "同时执行几个账号（账号内始终串行）；部分任务含真实对话，并发越高风控风险越大", gSchedule, provider.KindInt), 1, 4, ""), "schedule.growth_enabled"))
 	out = append(out,
 		f("schedule.include_disabled_in_tasks", "禁用账号也执行任务", "关闭时，已禁用的账号不参与定时任务", gSchedule, provider.KindBool),
 		f("schedule.balance_refresh_enabled", "余额自动刷新", "定期查询每个账号的余额", gSchedule, provider.KindBool),

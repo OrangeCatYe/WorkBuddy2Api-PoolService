@@ -16,6 +16,7 @@ import (
 	"github.com/orangeruan/poolservice/internal/core/credits"
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
+	"github.com/orangeruan/poolservice/internal/core/taskrun"
 	"github.com/orangeruan/poolservice/internal/gateway"
 	"github.com/orangeruan/poolservice/internal/httpx"
 	"github.com/orangeruan/poolservice/internal/panelapi"
@@ -36,6 +37,7 @@ type App struct {
 	keys    *keys.Store
 	reqs    *requests.Recorder
 	credits *credits.Service
+	runs    *taskrun.Recorder
 }
 
 type toggle struct {
@@ -80,6 +82,12 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, err
 	}
 	a.reqs = requests.New(requests.Config{Dir: filepath.Join(cfg.DataDir, "requests"), RetentionDays: 30})
+	a.runs = taskrun.New(taskrun.Config{Dir: filepath.Join(cfg.DataDir, "task-runs"), RetentionDays: 30})
+	for _, p := range a.reg.List() {
+		if h, ok := p.(provider.TaskHistoryAware); ok {
+			h.SetTaskRecorder(a.runs)
+		}
+	}
 
 	mux := http.NewServeMux()
 	gw := gateway.New(current, a.reg, a.catalog, nil)
@@ -106,6 +114,7 @@ func New(cfg *config.Config) (*App, error) {
 	api := panelapi.New(current, a.updateConfig, a.reg, a.catalog)
 	api.SetStores(a.keys, a.reqs)
 	api.SetCredits(a.credits)
+	api.SetTaskRuns(a.runs)
 	api.Register(apiMux)
 	mux.Handle("/api/", httpx.SecurityHeaders(apiMux))
 
