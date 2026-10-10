@@ -17,8 +17,11 @@ import (
 
 // RunStreakBonusNow 对所有可用账号执行连登兑换 + 抽奖（幂等：locked/无次数自动跳过）。
 // 由签到排程（RunCheckinNow）末尾调用；也可面板手动触发。
-func (s *Scheduler) RunStreakBonusNow() {
-	for _, st := range s.cfg.Pool.List() {
+func (s *Scheduler) RunStreakBonusNow() { s.RunStreakBonusFor(nil) }
+
+// RunStreakBonusFor 同 RunStreakBonusNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunStreakBonusFor(only []string) {
+	for _, st := range s.listFor(only) {
 		if st.Disabled {
 			continue
 		}

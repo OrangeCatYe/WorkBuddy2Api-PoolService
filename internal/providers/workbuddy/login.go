@@ -39,7 +39,7 @@ func (p *Provider) LoginMethods() []provider.LoginMethod {
 	methods := []provider.LoginMethod{
 		{ID: "oauth_cn", Name: "国内版授权", Description: "打开 CodeBuddy 授权页登录，完成后自动加入账号池"},
 	}
-	if p.cfg.Global.Enabled {
+	if p.settings().Global.Enabled {
 		methods = append(methods, provider.LoginMethod{
 			ID: "oauth_global", Name: "国际版授权", Description: "WorkBuddy 国际版（workbuddy.ai）授权登录",
 		})
@@ -106,7 +106,7 @@ func (p *Provider) StartLogin(ctx context.Context, method string, params map[str
 	case "oauth_cn", "oauth_global":
 		realm := "cn"
 		if method == "oauth_global" {
-			if !p.cfg.Global.Enabled {
+			if !p.settings().Global.Enabled {
 				return nil, nil, errors.New("国际版已在配置中关闭（providers.workbuddy.global.enabled=false）")
 			}
 			realm = "global"
@@ -203,7 +203,7 @@ func (p *Provider) PollLogin(ctx context.Context, sessionID string) (*provider.L
 // adopt 落盘凭证、加入池并执行首登动作（签到 / 国际版激活 + trial）。
 // 返回附加提示文案；失败只影响凭证落盘时返回 error。
 func (p *Provider) adopt(a *auth.Auth, realm string) (string, error) {
-	a.FilePath = filepath.Join(p.cfg.AuthDir, fmt.Sprintf("workbuddy-%s.json", a.UID))
+	a.FilePath = filepath.Join(p.settings().AuthDir, fmt.Sprintf("workbuddy-%s.json", a.UID))
 	if realm == "global" {
 		if _, err := auth.BackfillRealmFor(a, "global"); err != nil {
 			return "", fmt.Errorf("set realm: %w", err)

@@ -100,7 +100,8 @@ func TestProviderEmptyPool(t *testing.T) {
 	var _ provider.AccountOps = p
 	var _ provider.TaskCapable = p
 	var _ provider.QuotaCapable = p
-	if caps := provider.MetaWithCaps(p).Capabilities; len(caps) != 5 {
+	var _ provider.SettingsCapable = p
+	if caps := provider.MetaWithCaps(p).Capabilities; len(caps) != 6 {
 		t.Fatalf("caps = %v", caps)
 	}
 	if n := len(p.Accounts()); n != 0 {

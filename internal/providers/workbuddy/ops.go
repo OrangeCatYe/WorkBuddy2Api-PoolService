@@ -20,7 +20,7 @@ func (p *Provider) RefreshQuota(ctx context.Context, uid string) (*account.Quota
 	if a == nil {
 		return nil, fmt.Errorf("account %s not found", uid)
 	}
-	remain, total, expiring, earliestAt, earliestRemain, err := p.up.UserResourceDetailedWithExpiry(a, p.cfg.expiringSoon)
+	remain, total, expiring, earliestAt, earliestRemain, err := p.up.UserResourceDetailedWithExpiry(a, p.settings().expiringSoon)
 	if err != nil {
 		return nil, fmt.Errorf("查询余额失败: %w", err)
 	}
@@ -59,7 +59,7 @@ func (p *Provider) packageLoop(ctx context.Context) {
 		return
 	case <-time.After(15 * time.Second):
 	}
-	t := time.NewTicker(p.cfg.packageRefresh)
+	t := time.NewTicker(p.settings().packageRefresh)
 	defer t.Stop()
 	for {
 		for _, st := range p.pool.List() {
@@ -154,7 +154,7 @@ func (p *Provider) Do(ctx context.Context, uid, action string, _ map[string]stri
 
 // Tasks 定时任务清单（时点与开关来自配置）。
 func (p *Provider) Tasks() []provider.TaskDef {
-	s := p.cfg.Schedule
+	s := p.settings().Schedule
 	return []provider.TaskDef{
 		{ID: "checkin", Name: "每日签到", Description: "签到领积分，并刷新余额、解冻已回血账号", Hours: s.CheckinHours, Enabled: s.CheckinEnabled},
 		{ID: "activity", Name: "活跃上报", Description: "点亮连登，解锁首个伙伴", Hours: s.ActivityHours, Enabled: s.ActivityEnabled},
@@ -168,35 +168,55 @@ func (p *Provider) Tasks() []provider.TaskDef {
 }
 
 // RunTask 立即执行任务（异步，作用于全部账号；accountIDs 暂未使用）。
-func (p *Provider) RunTask(_ context.Context, taskID string, _ []string) error {
+func (p *Provider) RunTask(_ context.Context, taskID string, accountIDs []string) error {
+	// only 为 nil 表示全部账号；指定账号时校验存在性，避免静默无操作。
+	var only []string
+	if len(accountIDs) > 0 {
+		for _, id := range accountIDs {
+			if p.pool.AuthByUID(id) == nil {
+				return fmt.Errorf("账号 %s 不存在", id)
+			}
+		}
+		only = accountIDs
+	}
 	var fn func()
 	switch taskID {
 	case "checkin":
-		fn = p.sched.RunCheckinNow
+		fn = func() { p.sched.RunCheckinFor(only) }
 	case "activity":
-		fn = p.sched.RunActivityNow
+		fn = func() { p.sched.RunActivityFor(only) }
 	case "travel":
-		fn = p.sched.RunTravelNow
+		fn = func() { p.sched.RunTravelFor(only) }
 	case "keepalive":
-		fn = p.sched.RunKeepaliveNow
+		fn = func() { p.sched.RunKeepaliveFor(only) }
 	case "blackcat":
-		fn = p.sched.RunBlackcatNow
+		fn = func() { p.sched.RunBlackcatFor(only) }
 	case "streak":
-		fn = p.sched.RunStreakBonusNow
+		fn = func() { p.sched.RunStreakBonusFor(only) }
 	case "balance":
-		fn = p.sched.RunBalanceRefreshNow
+		fn = func() { p.sched.RunBalanceRefreshFor(only) }
 	case "packages":
 		fn = func() {
-			for _, st := range p.pool.List() {
-				p.refreshPackages(st.UID)
+			ids := only
+			if ids == nil {
+				for _, st := range p.pool.List() {
+					ids = append(ids, st.UID)
+				}
+			}
+			for _, id := range ids {
+				p.refreshPackages(id)
 			}
 		}
 	default:
 		return fmt.Errorf("unknown task %q", taskID)
 	}
+	scope := "全部账号"
+	if only != nil {
+		scope = fmt.Sprintf("%d 个账号", len(only))
+	}
 	go func() {
 		start := time.Now()
-		log.Printf("[workbuddy] 手动执行任务 %s", taskID)
+		log.Printf("[workbuddy] 手动执行任务 %s（%s）", taskID, scope)
 		fn()
 		log.Printf("[workbuddy] 任务 %s 完成，用时 %s", taskID, time.Since(start).Round(time.Millisecond))
 	}()

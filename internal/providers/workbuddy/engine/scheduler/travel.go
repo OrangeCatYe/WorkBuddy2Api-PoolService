@@ -46,9 +46,12 @@ func travelDay(t time.Time) string {
 // 领奖 + 领养前置上报），不发模型对话，与「让位防风控」不冲突；
 // 401/查询失败只跳过该账号本轮（不强刷 token，交 22:00 keepalive）；
 // 账号间限速 travelAccountDelay。
-func (s *Scheduler) RunTravelNow() {
+func (s *Scheduler) RunTravelNow() { s.RunTravelFor(nil) }
+
+// RunTravelFor 同 RunTravelNow，只处理 only 中的账号（nil = 全部；显式指定时禁用账号也执行）。
+func (s *Scheduler) RunTravelFor(only []string) {
 	first := true
-	for _, st := range s.cfg.Pool.List() {
+	for _, st := range s.listFor(only) {
 		if st.Disabled {
 			continue
 		}

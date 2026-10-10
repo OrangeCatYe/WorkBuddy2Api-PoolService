@@ -46,9 +46,12 @@ func (p *Provider) SetPickObserver(fn func(provider.PickEvent)) {
 
 // SetCreditReserve 实现 provider.RoutingTunable：>0 覆盖 pool.credit_floor，0 恢复配置值。
 func (p *Provider) SetCreditReserve(n float64) {
+	p.cfgMu.Lock()
+	p.reserve = n
+	p.cfgMu.Unlock()
 	if n > 0 {
 		p.pool.SetCreditFloor(int64(n))
 		return
 	}
-	p.pool.SetCreditFloor(p.cfg.Pool.CreditFloor)
+	p.pool.SetCreditFloor(p.settings().Pool.CreditFloor)
 }

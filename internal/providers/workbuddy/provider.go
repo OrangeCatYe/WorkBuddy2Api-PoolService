@@ -34,7 +34,12 @@ const ID = "workbuddy"
 
 // Provider WorkBuddy 适配器。
 type Provider struct {
+	cfgMu   sync.RWMutex
 	cfg     Settings
+	started Settings // 启动时的配置，用于计算需重启才生效的改动
+	desired Settings // 面板最近保存的完整配置（含尚未生效的需重启字段）
+	live    *livecfg.Holder
+	reserve float64 // 积分中心设置的余额保底（>0 时覆盖 pool.credit_floor）
 	pool    *pool.Pool
 	up      *upstream.Client
 	store   redisstore.Store
@@ -71,7 +76,7 @@ func New(cfg Settings) (*Provider, error) {
 	}
 	log.Printf("[workbuddy] loaded %d account(s) from %s", len(auths), cfg.AuthDir)
 
-	p := &Provider{cfg: cfg, packages: map[string]pkgSnapshot{}, logins: map[string]loginSession{}}
+	p := &Provider{cfg: cfg, started: cfg, desired: cfg, packages: map[string]pkgSnapshot{}, logins: map[string]loginSession{}}
 	p.store = redisstore.New(cfg.Upstash.URL, cfg.Upstash.Token)
 
 	pl := pool.New(cfg.StateFile)
@@ -151,7 +156,7 @@ func New(cfg Settings) (*Provider, error) {
 	})
 
 	// 网关鉴权已由 PoolService 完成：engine 的 api_key 置空（不再二次鉴权）。
-	live := livecfg.New(livecfg.Snapshot{
+	p.live = livecfg.New(livecfg.Snapshot{
 		SoftCooldown:         cfg.softRate,
 		SanitizeFingerprints: cfg.Features.SanitizeBlacklistFingerprints,
 		RecordClientInfo:     cfg.Logging.RequestClientInfo,
@@ -164,7 +169,7 @@ func New(cfg Settings) (*Provider, error) {
 			}
 			return 0
 		},
-		RedisMode: redisMode, SoftCooldown: cfg.softRate, Live: live,
+		RedisMode: redisMode, SoftCooldown: cfg.softRate, Live: p.live,
 		Usage: p.usage, RequestLog: p.reqlog,
 		PromptMode: cfg.Prompt.Mode, PromptText: cfg.promptText,
 		RecordClientInfo: cfg.Logging.RequestClientInfo,
@@ -183,7 +188,16 @@ func (p *Provider) Start(ctx context.Context) error {
 	}
 	p.wg.Add(1)
 	go func() { defer p.wg.Done(); p.sched.Run(ctx) }()
-	p.sched.StartBalanceRefresh(ctx, p.cfg.balanceRefresh)
+	// 余额刷新循环总是启动：关闭时处于暂停态，面板重新打开后可热恢复。
+	st := p.settings()
+	minutes := st.Schedule.BalanceRefreshMinutes
+	if minutes <= 0 {
+		minutes = 5
+	}
+	p.sched.StartBalanceRefresh(ctx, time.Duration(minutes)*time.Minute)
+	if !st.Schedule.BalanceRefreshEnabled {
+		p.sched.SetBalanceInterval(0)
+	}
 	p.wg.Add(1)
 	go func() { defer p.wg.Done(); p.packageLoop(ctx) }()
 	go p.warmModelRates(ctx)
