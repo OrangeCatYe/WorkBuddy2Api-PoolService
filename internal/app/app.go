@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -19,6 +20,8 @@ import (
 	"github.com/orangeruan/poolservice/internal/panelapi"
 	"github.com/orangeruan/poolservice/internal/providers/mock"
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy"
+	"github.com/orangeruan/poolservice/internal/store/keys"
+	"github.com/orangeruan/poolservice/internal/store/requests"
 	"github.com/orangeruan/poolservice/internal/webui"
 )
 
@@ -29,6 +32,8 @@ type App struct {
 	reg     *provider.Registry
 	catalog *router.Catalog
 	server  *http.Server
+	keys    *keys.Store
+	reqs    *requests.Recorder
 }
 
 type toggle struct {
@@ -68,11 +73,22 @@ func New(cfg *config.Config) (*App, error) {
 	a.catalog = router.NewCatalog(a.reg, cfg.Gateway.CatalogTTL.Duration)
 	current := func() *config.Config { return a.cfg.Load() }
 
+	a.keys, err = keys.Open(filepath.Join(cfg.DataDir, "keys.json"))
+	if err != nil {
+		return nil, err
+	}
+	a.reqs = requests.New(requests.Config{Dir: filepath.Join(cfg.DataDir, "requests"), RetentionDays: 30})
+
 	mux := http.NewServeMux()
-	gateway.New(current, a.reg, a.catalog, nil).Register(mux)
+	gw := gateway.New(current, a.reg, a.catalog, nil)
+	gw.SetKeys(a.keys)
+	gw.SetRequests(a.reqs)
+	gw.Register(mux)
 
 	apiMux := http.NewServeMux()
-	panelapi.New(current, a.updateConfig, a.reg, a.catalog).Register(apiMux)
+	api := panelapi.New(current, a.updateConfig, a.reg, a.catalog)
+	api.SetStores(a.keys, a.reqs)
+	api.Register(apiMux)
 	mux.Handle("/api/", httpx.SecurityHeaders(apiMux))
 
 	mux.Handle("GET /panel/", http.RedirectHandler("/", http.StatusMovedPermanently))
@@ -111,6 +127,24 @@ func (a *App) Run(ctx context.Context) error {
 	defer func() {
 		for i := len(started) - 1; i >= 0; i-- {
 			started[i].Stop()
+		}
+		if err := a.keys.Flush(); err != nil {
+			log.Printf("WARN: [app] flush keys: %v", err)
+		}
+		a.reqs.Close()
+	}()
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := a.keys.Flush(); err != nil {
+					log.Printf("WARN: [app] flush keys: %v", err)
+				}
+			}
 		}
 	}()
 	for _, p := range a.reg.List() {

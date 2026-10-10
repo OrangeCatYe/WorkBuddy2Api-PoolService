@@ -12,6 +12,8 @@ import (
 	"github.com/orangeruan/poolservice/internal/core/router"
 	"github.com/orangeruan/poolservice/internal/gateway"
 	"github.com/orangeruan/poolservice/internal/httpx"
+	"github.com/orangeruan/poolservice/internal/store/keys"
+	"github.com/orangeruan/poolservice/internal/store/requests"
 )
 
 // Version 服务版本（构建时 -ldflags 注入）。
@@ -24,6 +26,8 @@ type API struct {
 	reg     *provider.Registry
 	catalog *router.Catalog
 	started time.Time
+	keys    *keys.Store
+	reqs    *requests.Recorder
 }
 
 // New 创建。
@@ -40,6 +44,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/models/refresh", a.auth(a.refreshModels))
 	a.registerProviderRoutes(mux)
 	a.registerSettingsRoutes(mux)
+	a.registerGatewayRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {

@@ -183,36 +183,7 @@ func num(v any) (float64, bool) {
 
 func (r *respRewriter) captureUsage(u map[string]any) {
 	r.hasUsage = true
-	get := func(keys ...string) int64 {
-		for _, k := range keys {
-			if f, ok := num(u[k]); ok {
-				return int64(f)
-			}
-		}
-		return 0
-	}
-	r.usage.PromptTokens = get("prompt_tokens", "input_tokens")
-	r.usage.CompletionTokens = get("completion_tokens", "output_tokens")
-	r.usage.TotalTokens = get("total_tokens")
-	if r.usage.TotalTokens == 0 {
-		r.usage.TotalTokens = r.usage.PromptTokens + r.usage.CompletionTokens
-	}
-	if d, ok := u["prompt_tokens_details"].(map[string]any); ok {
-		if f, ok := num(d["cached_tokens"]); ok {
-			r.usage.CachedTokens = int64(f)
-		}
-	}
-	if r.usage.CachedTokens == 0 {
-		r.usage.CachedTokens = get("prompt_cache_hit_tokens", "cache_read_input_tokens")
-	}
-	if d, ok := u["completion_tokens_details"].(map[string]any); ok {
-		if f, ok := num(d["reasoning_tokens"]); ok {
-			r.usage.ReasoningTokens = int64(f)
-		}
-	}
-	if f, ok := num(u["credit"]); ok {
-		r.usage.Credit, r.usage.HasCredit = f, true
-	}
+	r.usage = parseUsage(u)
 }
 
 // Unwrap 供 http.ResponseController 使用。

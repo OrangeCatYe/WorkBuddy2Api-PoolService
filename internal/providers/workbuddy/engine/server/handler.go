@@ -74,7 +74,14 @@ type Config struct {
 	// 来自 logging.request_client_info（缺省 true）；关闭时 reqlog 事件的来源字段
 	// 保持为空，归档与面板都不出现来源信息。
 	RecordClientInfo bool
+
+	// OnRequestDone PoolService 扩展：每个聊天请求结束时回调（含实际账号 UID），
+	// 用于把 engine 侧的选号结果与重试次数回传网关。nil = 不回调。
+	OnRequestDone func(ctx context.Context, ev reqlog.Event, uid string)
 }
+
+// ExternalRequestIDHeader PoolService 扩展：网关分配的 Request-ID 透传头。
+const ExternalRequestIDHeader = "X-Poolsvc-Request-Id"
 
 // loadLive 返回当前运行期快照；Live 为 nil 时用静态字段合成。
 func (h *Handler) loadLive() livecfg.Snapshot {
@@ -148,6 +155,10 @@ func NewHandler(cfg Config) *Handler {
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.cfg.RequestLog != nil && r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions" {
 		trace := &requestTrace{id: reqlog.NewRequestID(), start: time.Now()}
+		// PoolService：沿用网关分配的 Request-ID，保证网关日志与 engine 归档同一 ID。
+		if id := r.Header.Get(ExternalRequestIDHeader); id != "" {
+			trace.id = id
+		}
 		if h.loadLive().RecordClientInfo {
 			trace.captureClientInfo(r)
 		}
@@ -160,7 +171,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if status == 0 {
 				status = http.StatusOK
 			}
-			h.cfg.RequestLog.Record(trace.event(status))
+			ev := trace.event(status)
+			h.cfg.RequestLog.Record(ev)
+			if h.cfg.OnRequestDone != nil {
+				uid := ""
+				if trace.stat != nil {
+					uid = trace.stat.uid
+				}
+				h.cfg.OnRequestDone(r.Context(), ev, uid)
+			}
 		}()
 		h.mux.ServeHTTP(obs, r)
 		return
