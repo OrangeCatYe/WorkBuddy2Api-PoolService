@@ -2,6 +2,11 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.6.1] - 2026-10-10
+
+### 修复
+- ttswitch 无法获取模型列表：`/v1/models` 同时输出了 `name` 与 `display_name`、`context_window` 与 `context_length`、`reasoning_levels` 与 `reasoning_efforts`。ttswitch 用 serde 别名把每组映射到同一字段，同组出现两个会报 duplicate field，整个列表解析失败，模型、上下文、工具、推理档位都拿不到。现在每组只输出 ttswitch 的规范名，并加了测试防止回归
+
 ## [0.6.0] - 2026-10-10
 
 ### 新增

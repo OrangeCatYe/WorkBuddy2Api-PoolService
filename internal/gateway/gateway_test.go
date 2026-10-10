@@ -63,6 +63,20 @@ func TestModelsTTSwitchFields(t *testing.T) {
 	if mods := think["input_modalities"].([]any); len(mods) != 2 || mods[1] != "image" {
 		t.Errorf("input_modalities = %v", mods)
 	}
+	// ttswitch 的 serde 别名：同组出现两个名字会 duplicate field，整个列表解析失败。
+	for _, m := range resp.Data {
+		for _, g := range ttswitchAliasGroups {
+			var hit []string
+			for _, k := range g {
+				if _, ok := m[k]; ok {
+					hit = append(hit, k)
+				}
+			}
+			if len(hit) > 1 {
+				t.Errorf("%v: duplicate alias fields %v", m["id"], hit)
+			}
+		}
+	}
 }
 
 func TestModelsRequireKey(t *testing.T) {

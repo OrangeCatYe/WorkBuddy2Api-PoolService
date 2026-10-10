@@ -17,10 +17,12 @@ type NamingOptions struct {
 
 // ModelEntries 把目录转换为 /v1/models 条目。
 //
-// 字段同时满足 OpenAI 规范与 ttswitch 解析（services/model_fetch.rs）：
-// display_name、context_window、max_output_tokens、input_modalities、
-// supports_tools、reasoning_levels 是 ttswitch 识别的规范名；
-// context_length、name、reasoning_efforts 作为通用别名一并输出。
+// 字段同时满足 OpenAI 规范与 ttswitch 解析（services/model_fetch.rs）。
+//
+// 注意：ttswitch 用 serde 别名把多个名字映射到同一字段（name/display_name、
+// context_window/context_length、reasoning_levels/reasoning_efforts 等），同一对象里
+// 同组名字出现两个会触发 serde 的 duplicate field 错误，整个列表解析失败。
+// 因此每组只输出一个名字，见 ttswitchAliasGroups 与对应测试。
 func ModelEntries(entries []router.Entry, opt NamingOptions) []map[string]any {
 	// 短名冲突检测：同一短名只给优先级最高者（entries 已按注册顺序）。
 	shortOwner := map[string]int{}
@@ -73,7 +75,6 @@ func modelEntry(id string, e router.Entry, creditSuffix bool) map[string]any {
 		"owned_by":     e.Provider,
 		"provider":     e.Provider,
 		"display_name": name,
-		"name":         name,
 	}
 	if m.Description != "" {
 		entry["description"] = m.Description
@@ -83,7 +84,6 @@ func modelEntry(id string, e router.Entry, creditSuffix bool) map[string]any {
 	}
 	if m.ContextWindow > 0 {
 		entry["context_window"] = m.ContextWindow
-		entry["context_length"] = m.ContextWindow
 	}
 	if m.MaxOutputTokens > 0 {
 		entry["max_output_tokens"] = m.MaxOutputTokens
@@ -100,7 +100,6 @@ func modelEntry(id string, e router.Entry, creditSuffix bool) map[string]any {
 	}
 	if len(m.ReasoningLevels) > 0 {
 		entry["reasoning_levels"] = m.ReasoningLevels
-		entry["reasoning_efforts"] = m.ReasoningLevels
 	}
 	if m.DefaultReasoning != "" {
 		entry["reasoning_default_effort"] = m.DefaultReasoning
@@ -120,4 +119,13 @@ func modelEntry(id string, e router.Entry, creditSuffix bool) map[string]any {
 		}
 	}
 	return entry
+}
+
+// ttswitchAliasGroups ttswitch ModelEntry 中映射到同一字段的名字（每组最多出现一个）。
+var ttswitchAliasGroups = [][]string{
+	{"name", "display_name"},
+	{"context_window", "context_length", "max_context_length", "context_window_tokens"},
+	{"max_output_tokens", "max_tokens", "max_completion_tokens", "max_output_length", "output_token_limit"},
+	{"supports_tools", "tool_call", "supports_tool_calls", "supports_function_calling"},
+	{"reasoning_levels", "reasoning_efforts"},
 }
