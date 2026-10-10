@@ -227,6 +227,38 @@ type TaskCapable interface {
 	RunTask(ctx context.Context, taskID string, accountIDs []string) error
 }
 
+// ---- 路由调优（积分策略） ----
+
+// PickCandidate 选号候选及其最终权重。
+type PickCandidate struct {
+	AccountID string  `json:"account_id"`
+	Weight    float64 `json:"weight"`
+	Bias      float64 `json:"bias"`
+	Tier      int     `json:"tier"` // 0 实测免费 / 1 未知 / 2 实测收费
+}
+
+// PickEvent 一次选号。
+type PickEvent struct {
+	Time       time.Time       `json:"time"`
+	Provider   string          `json:"provider"`
+	Model      string          `json:"model"`
+	Chosen     string          `json:"chosen"`
+	Fallback   bool            `json:"fallback,omitempty"`
+	Sticky     bool            `json:"sticky,omitempty"`
+	Explored   bool            `json:"explored,omitempty"`
+	Candidates []PickCandidate `json:"candidates,omitempty"`
+}
+
+// RoutingTunable 允许核心积分策略影响选号的 Provider。
+// bias 返回账号权重乘数（1 = 不变，0 = 有其他候选时不选）；两个回调都可能在
+// Provider 内部锁中调用，必须快速返回且不得回调 Provider。
+type RoutingTunable interface {
+	SetRoutingBias(fn func(accountID, model string) float64)
+	SetPickObserver(fn func(PickEvent))
+	// SetCreditReserve 余额保底：低于该值的账号不接收费模型；0 = 沿用 Provider 自身配置。
+	SetCreditReserve(n float64)
+}
+
 // MetaWithCaps 根据实际实现的接口补全能力清单。
 func MetaWithCaps(p Provider) Meta {
 	m := p.Meta()

@@ -44,6 +44,9 @@ type Config struct {
 
 	Gateway GatewayConfig `json:"gateway"`
 
+	// Credits 积分预测与选号策略。
+	Credits CreditsConfig `json:"credits"`
+
 	// Providers 各 Provider 的私有配置，原样交给适配器解析。
 	Providers map[string]json.RawMessage `json:"providers,omitempty"`
 
@@ -64,6 +67,22 @@ type GatewayConfig struct {
 	AllowAnonymous bool `json:"allow_anonymous"`
 }
 
+// CreditsConfig 积分策略。
+type CreditsConfig struct {
+	// Strategy 选号策略：waste_first（默认，快过期 / 将浪费的积分优先）或 off（沿用平台原算法）。
+	Strategy string `json:"strategy"`
+	// WasteBoost 紧迫度最高的账号权重放大倍数（1~10，默认 4）。
+	WasteBoost float64 `json:"waste_boost"`
+	// ExpensiveRate 倍率 ≥ 该值的模型视为高价模型，进一步集中到将浪费积分的账号（默认 0.5）。
+	ExpensiveRate float64 `json:"expensive_rate"`
+	// DailyCap 单账号每日积分软上限；超过后降权到 0.05（仍可兜底）。0 = 不限。
+	DailyCap float64 `json:"daily_cap"`
+	// Reserve 余额保底：低于该值的账号不接收费模型；0 = 沿用平台自身配置。
+	Reserve float64 `json:"reserve"`
+	// BurnWindowDays 消耗速度统计窗口（天，1~30，默认 7）。
+	BurnWindowDays int `json:"burn_window_days"`
+}
+
 // Default 返回默认配置。
 func Default() *Config {
 	return &Config{
@@ -73,6 +92,7 @@ func Default() *Config {
 			ModelNaming: "short",
 			CatalogTTL:  Duration{10 * time.Minute},
 		},
+		Credits:   CreditsConfig{Strategy: "waste_first", WasteBoost: 4, ExpensiveRate: 0.5, BurnWindowDays: 7},
 		Providers: map[string]json.RawMessage{},
 	}
 }
@@ -146,6 +166,7 @@ func (c *Config) normalize() {
 	if c.Providers == nil {
 		c.Providers = map[string]json.RawMessage{}
 	}
+	c.Credits.Normalize()
 }
 
 // ProviderConfig 把某 Provider 的配置解码到 out；未配置时保持 out 默认值。
@@ -204,4 +225,34 @@ func RandomKey(prefix string) string {
 		panic(err)
 	}
 	return prefix + hex.EncodeToString(b)
+}
+
+// Normalize 修正非法值。
+func (c *CreditsConfig) Normalize() {
+	switch c.Strategy {
+	case "waste_first", "off":
+	default:
+		c.Strategy = "waste_first"
+	}
+	if c.WasteBoost < 1 {
+		c.WasteBoost = 4
+	}
+	if c.WasteBoost > 10 {
+		c.WasteBoost = 10
+	}
+	if c.ExpensiveRate <= 0 {
+		c.ExpensiveRate = 0.5
+	}
+	if c.DailyCap < 0 {
+		c.DailyCap = 0
+	}
+	if c.Reserve < 0 {
+		c.Reserve = 0
+	}
+	if c.BurnWindowDays <= 0 {
+		c.BurnWindowDays = 7
+	}
+	if c.BurnWindowDays > 30 {
+		c.BurnWindowDays = 30
+	}
 }

@@ -41,6 +41,8 @@ type Gateway struct {
 	picker  provider.Picker
 	keys    *keys.Store
 	reqs    *requests.Recorder
+
+	observers []func(requests.Entry)
 }
 
 // New 创建网关。
@@ -53,6 +55,9 @@ func (g *Gateway) SetKeys(s *keys.Store) { g.keys = s }
 
 // SetRequests 注入请求日志记录器（nil = 只写进程日志）。
 func (g *Gateway) SetRequests(r *requests.Recorder) { g.reqs = r }
+
+// OnRecord 注册请求完成回调（如积分账本）。须在 Register 之前调用。
+func (g *Gateway) OnRecord(fn func(requests.Entry)) { g.observers = append(g.observers, fn) }
 
 // Register 挂载路由。
 func (g *Gateway) Register(mux *http.ServeMux) {
@@ -364,6 +369,9 @@ func (g *Gateway) record(e requests.Entry, start time.Time) {
 	e.OK = e.Status >= 200 && e.Status < 300 && e.Error == ""
 	if g.reqs != nil {
 		g.reqs.Add(e)
+	}
+	for _, fn := range g.observers {
+		fn(e)
 	}
 	if g.keys != nil && e.KeyID != LegacyKeyID && e.KeyID != "anonymous" {
 		g.keys.Record(e.KeyID, e.OK, e.PromptTokens, e.CompletionTokens, e.CachedTokens, e.Credit)

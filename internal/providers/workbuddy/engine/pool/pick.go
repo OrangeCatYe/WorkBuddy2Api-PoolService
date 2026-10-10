@@ -146,6 +146,7 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 	type weighted struct {
 		e      *entry
 		w      float64
+		bias   float64
 		tier   int
 		cost1k float64
 	}
@@ -153,7 +154,8 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 	for _, e := range cands {
 		ti, ci := costTier(e)
 		if ti == bestTier {
-			ws = append(ws, weighted{e: e, w: p.routingWeightOf(e, maxCredits, now), tier: ti, cost1k: ci})
+			bias := p.biasOf(e, reqModel)
+			ws = append(ws, weighted{e: e, w: p.routingWeightOf(e, maxCredits, now) * bias, bias: bias, tier: ti, cost1k: ci})
 		}
 	}
 	// 等权重洗牌：仅当存在权重相等且候选数超过 top5 时，才对 ws 做 Fisher-Yates
@@ -219,7 +221,7 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 			}
 		}
 	} else {
-		e = p.pickWeighted(eligible) // eligible 保序 = top5 降序子集
+		e = p.pickWeighted(eligible, reqModel) // eligible 保序 = top5 降序子集
 	}
 	if explored {
 		// 探索事件日志（可观测性）：选中号此时才确定，故在选中点打出。
@@ -227,6 +229,13 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 		// 常规路径）。
 		log.Printf("[pool] cost explore model=%s realm=%q acct=%s window=%s",
 			reqModel, realm, logfmt.Label(e.a.UID, e.a.Nickname), p.costExploreInterval)
+	}
+	if p.pickObserver != nil {
+		ev := PickEvent{Time: now, Model: reqModel, Realm: realm, Chosen: e.a.UID, Explored: explored}
+		for _, c := range ws {
+			ev.Candidates = append(ev.Candidates, PickCandidate{UID: c.e.a.UID, Weight: c.w, Bias: c.bias, Tier: c.tier})
+		}
+		p.pickObserver(ev)
 	}
 	e.lastUsed = now // 锁内即时标记：下一个进入 pick 的 goroutine 立即看到本号已用
 	p.pickSeq++
@@ -328,6 +337,9 @@ func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, re
 		return nil
 	}
 	log.Printf("WARN: [pool] fallback_earliest_expiry acct=%s until=%s kind=%s", logfmt.Label(best.a.UID, best.a.Nickname), best.expiry(now).Format(time.RFC3339), best.fallbackKind(now))
+	if p.pickObserver != nil {
+		p.pickObserver(PickEvent{Time: now, Model: model, Realm: realm, Chosen: best.a.UID, Fallback: true})
+	}
 	best.lastUsed = time.Now()
 	// 兜底同样是「选中」，必须与 pick() 正常路径、粘性命中路径（PickByUIDForModel）
 	// 一样推进 usedSeq/pickSeq：否则被兜底反复选中的账号 usedSeq 恒为 0，在 pick 的
@@ -362,7 +374,7 @@ var minPickGap = 100 * time.Millisecond
 // credits 全 0 时仍按 idleWeight 加权（不退化均匀随机）。
 // 权重为浮点，用 int64 定点（×1e6）抽签可保持确定性随机源注入（randInt64N 语义不变）。
 // 随机源优先用 p.randInt64N（仅供测试注入确定性），nil 时回退 math/rand/v2 全局源。
-func (p *Pool) pickWeighted(cands []*entry) *entry {
+func (p *Pool) pickWeighted(cands []*entry, model string) *entry {
 	now := time.Now()
 	var maxCredits int64
 	for _, e := range cands {
@@ -374,7 +386,7 @@ func (p *Pool) pickWeighted(cands []*entry) *entry {
 	weights := make([]int64, len(cands))
 	var total int64
 	for i, e := range cands {
-		w := p.routingWeightOf(e, maxCredits, now)
+		w := p.routingWeightOf(e, maxCredits, now) * p.biasOf(e, model)
 		weights[i] = int64(w * scale)
 		total += weights[i]
 	}

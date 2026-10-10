@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/orangeruan/poolservice/internal/config"
+	"github.com/orangeruan/poolservice/internal/core/credits"
 	"github.com/orangeruan/poolservice/internal/core/provider"
 	"github.com/orangeruan/poolservice/internal/core/router"
 	"github.com/orangeruan/poolservice/internal/gateway"
@@ -34,6 +35,7 @@ type App struct {
 	server  *http.Server
 	keys    *keys.Store
 	reqs    *requests.Recorder
+	credits *credits.Service
 }
 
 type toggle struct {
@@ -83,11 +85,27 @@ func New(cfg *config.Config) (*App, error) {
 	gw := gateway.New(current, a.reg, a.catalog, nil)
 	gw.SetKeys(a.keys)
 	gw.SetRequests(a.reqs)
+
+	// 积分服务：用最近 31 天的请求归档重建消耗账本。
+	since := time.Now()
+	ledger := credits.NewLedger(since)
+	a.reqs.ScanArchive(since.AddDate(0, 0, -31), func(e requests.Entry) {
+		if e.Time.Before(since) {
+			since = e.Time
+		}
+		if e.HasCredit && e.AccountID != "" {
+			ledger.Add(e.Provider+"/"+e.AccountID, e.Time, e.Credit)
+		}
+	})
+	a.credits = credits.New(current, a.reg, a.catalog, ledger)
+	a.credits.Attach()
+	gw.OnRecord(func(e requests.Entry) { a.credits.Record(e.Provider, e.AccountID, e.Time, e.Credit, e.HasCredit) })
 	gw.Register(mux)
 
 	apiMux := http.NewServeMux()
 	api := panelapi.New(current, a.updateConfig, a.reg, a.catalog)
 	api.SetStores(a.keys, a.reqs)
+	api.SetCredits(a.credits)
 	api.Register(apiMux)
 	mux.Handle("/api/", httpx.SecurityHeaders(apiMux))
 
@@ -155,6 +173,7 @@ func (a *App) Run(ctx context.Context) error {
 			started = append(started, s)
 		}
 	}
+	go a.credits.Run(ctx)
 	errCh := make(chan error, 1)
 	go func() {
 		log.Printf("[app] listening on http://%s", a.server.Addr)

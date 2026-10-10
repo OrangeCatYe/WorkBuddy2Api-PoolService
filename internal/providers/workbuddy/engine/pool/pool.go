@@ -80,6 +80,9 @@ type Pool struct {
 	stopCh chan struct{}
 	// closeOnce 保证 Close 幂等（多次调用不重复 close channel）。
 	closeOnce sync.Once
+	// routingBias / pickObserver PoolService 扩展（见 routing_ext.go）；nil = 原项目行为。
+	routingBias  func(uid, model string) float64
+	pickObserver func(PickEvent)
 }
 
 // defaultBreaker* 熔断器默认参数（FreeBuff2API 参考口径）。
