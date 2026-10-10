@@ -1,0 +1,36 @@
+{
+  "listen": "127.0.0.1:7863",
+  "data_dir": "./data",
+  "admin_key": "adm-change-me",
+  "gateway": {
+    "model_naming": "short",
+    "catalog_ttl": "10m",
+    "credit_in_model_name": false,
+    "legacy_api_key": "sk-change-me",
+    "allow_anonymous": false
+  },
+  "providers": {
+    "workbuddy": {
+      "enabled": true,
+      "auth_dir": "",
+      "state_file": "",
+      "pool": {
+        "max_in_flight": 3,
+        "prefer_expiring": true,
+        "expiring_soon": "168h",
+        "credit_floor": 0
+      },
+      "schedule": {
+        "checkin_hours": [9, 21],
+        "checkin_enabled": true,
+        "keepalive_enabled": true,
+        "balance_refresh_minutes": 5,
+        "package_refresh_minutes": 30
+      },
+      "global": { "enabled": true },
+      "prompt": { "mode": "passthrough" },
+      "session_sticky": { "enabled": true, "ttl": "30m" }
+    },
+    "mock": { "enabled": false }
+  }
+}
