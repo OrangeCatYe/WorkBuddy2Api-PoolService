@@ -16,12 +16,12 @@ import { LoginGate } from '@/components/LoginGate'
 import { OverviewPage } from '@/pages/Overview'
 import { AccountsPage } from '@/pages/Accounts'
 import { ModelsPage } from '@/pages/Models'
-import { Placeholder } from '@/pages/Placeholder'
 import { TasksPage } from '@/pages/Tasks'
 import { SettingsPage } from '@/pages/Settings'
 import { GatewayPage } from '@/pages/Gateway'
 import { LogsPage } from '@/pages/Logs'
 import { UsagePage } from '@/pages/Usage'
+import { CreditsPage } from '@/pages/Credits'
 import { ToastProvider } from '@/components/overlay'
 
 applyInitialTheme()
@@ -42,10 +42,7 @@ const router = createBrowserRouter([
       { path: '/', element: <OverviewPage /> },
       { path: '/accounts', element: <AccountsPage /> },
       { path: '/models', element: <ModelsPage /> },
-      {
-        path: '/credits',
-        element: <Placeholder phase="P4" title="积分中心" items={['积分包到期日历与浪费预警', '账号消耗速度与耗尽预测', '选号策略配置与决策回放']} />,
-      },
+      { path: '/credits', element: <CreditsPage /> },
       { path: '/gateway', element: <GatewayPage /> },
       { path: '/usage', element: <UsagePage /> },
       { path: '/logs', element: <LogsPage /> },
