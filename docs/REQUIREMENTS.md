@@ -58,7 +58,7 @@
 - F1.2 统一账号模型 `Account{id, provider, label, status, quota, tags, meta}`，原 WorkBuddy 字段放入 `meta`
 - F1.3 Provider 注册表；面板按 Provider 动态渲染（登录入口、任务按钮、专属字段），未实现的能力自动隐藏
 - F1.4 模型路由：`provider/model` 全名 + 无前缀短名（唯一时直达，多 Provider 同名时按优先级 / 策略）
-- F1.5 第一期仅 WorkBuddy（开发期的 `mock` 平台已于 v0.6.3 移除，网关测试改用测试文件内的替身）
+- F1.5 第一期仅接入 WorkBuddy。不提供任何模拟 / 演示平台（`mock` 平台已于 v0.6.3 移除，网关测试改用测试文件内的替身，不编进程序）
 
 ### 3.2 面板重构（F2）
 - F2.1 技术栈：React 18 + TypeScript + Vite + Tailwind CSS + TanStack Query + ECharts；构建产物 `go:embed` 进单二进制
