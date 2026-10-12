@@ -2,7 +2,8 @@
 /bin/
 /dist/
 *.exe
-poolsvc
+/poolsvc
+/pools.exe
 
 # 前端
 web/node_modules/
