@@ -176,5 +176,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precheck.ps1 -Quick 
 
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 分支与版本管理：[docs/BRANCHING.md](docs/BRANCHING.md)
 - 新平台接入：[docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)
 - 变更记录：[CHANGELOG.md](CHANGELOG.md)
