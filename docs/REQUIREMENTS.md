@@ -153,7 +153,7 @@ ttswitch 解析字段（含别名）与本项目输出：
 | P4 | `feat/credits` | 积分账本与预测、积分中心、到期优先选号策略、选号回放 | v0.4.0 ✅ |
 | P5 | `feat/panel` | 概览整合积分与用量、账号筛选与批量操作、平台参数设置页、窄屏适配（积分中心 / 用量 / 日志 / 接入向导已在 P3、P4 完成） | v0.5.0 ✅ |
 | P6 | `feat/growth` | 成长任务中心迁移、任务执行记录 | v0.6.0 ✅ |
-| P7 | `chore/release` | GitHub Actions 发布 Windows / Linux 二进制、迁移工具 | v1.0.0 |
+| P7 | `chore/release` | 公开 GitHub 仓库、提交身份改为个人、CI（gofmt/vet/test/race/前端构建）、Release 工作流发布 Windows / Linux 二进制、迁移工具 | v1.0.0 |
 
 Docker 镜像推迟到 v1.0 之后（本机开发环境不允许运行 Docker，无法验证）。
 

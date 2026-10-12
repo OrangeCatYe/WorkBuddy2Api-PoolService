@@ -2,6 +2,17 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [1.0.0] - 2026-10-12
+
+### 新增
+- 迁移工具 `cmd/migrate`：一条命令把旧版 workbuddy2api-panel 的账号凭证与运行态（余额、禁用、冷却、统计、模型冷却、成本账本）迁入本项目，迁移前自动备份，同 UID 冲突时保留令牌较新的一方
+- CI 工作流：gofmt、go vet、单元测试、竞态检测（`-race`，本机无 C 编译器跑不了，在 CI 补齐）与前端构建
+- Release 工作流：打 `v*` 标签自动交叉编译 Windows / Linux amd64 单二进制，附带校验和并上传 Release
+
+### 变更
+- 仓库公开到 GitHub，提交身份统一改为个人账号
+- F1.5 明确不提供模拟 / 演示平台
+
 ## [0.6.3] - 2026-10-10
 
 ### 移除

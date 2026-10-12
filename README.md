@@ -100,10 +100,39 @@ env_key = "POOLSVC_API_KEY"
 
 ## 从 workbuddy2api-panel 迁移
 
+用内置迁移工具一条命令完成（旧版目录指到 v1.x 的解压目录）：
+
+```bash
+go run ./cmd/migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64
+
+# 先看看会做什么，不写文件
+go run ./cmd/migrate -from /path/to/old -dry-run
+```
+
+工具会把旧版 `auths/` 下的凭证与 `data/state.json` 里的运行态（余额、禁用、冷却、
+统计、模型冷却、成本账本）一并迁入，迁移前自动备份现有 `auths` 与 `state.json`
+到 `data/backup/`。同 UID 已存在时保留令牌较新的一方，避免用过期凭证覆盖有效
+凭证；加 `-force` 改为旧版无条件覆盖。
+
+迁移后重启服务生效。旧版客户端使用的 `cn:glm-5.2` 这类模型名仍然可用。
+
+手工迁移（工具不适用时）参照：
+
 1. 把旧项目的 `auths/` 目录复制到 `data/workbuddy/auths/`，或在配置中设置 `providers.workbuddy.auth_dir` 指向旧目录。
 2. 可选：把旧 `data/state.json` 复制到 `data/workbuddy/state.json`，保留冷却与统计状态。
 3. 旧 `config.json` 中的 `pool`、`schedule`、`upstream`、`global`、`prompt` 等段落原样放进 `providers.workbuddy`。
-4. 旧客户端使用的 `cn:glm-5.2` 这类模型名仍然可用。
+
+## 下载
+
+从 [Releases](https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases) 下载
+对应平台压缩包，解压后复制配置模板并启动：
+
+```bash
+cp config.example.json config.json
+./poolsvc            # Windows 用 pools.exe
+```
+
+压缩包附带 `.sha256` 校验文件：`sha256sum -c poolsvc-linux-amd64.tar.gz.sha256`。
 
 ## 开发
 
@@ -112,6 +141,8 @@ npm --prefix web install
 npm --prefix web run dev          # 前端开发服务器，代理到 127.0.0.1:7863
 go test ./...
 ```
+
+打 `v*` 标签会自动触发 Release 工作流，交叉编译 Windows / Linux 产物并上传。
 
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
