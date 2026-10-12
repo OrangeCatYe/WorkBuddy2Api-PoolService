@@ -100,14 +100,18 @@ env_key = "POOLSVC_API_KEY"
 
 ## 从 workbuddy2api-panel 迁移
 
-用内置迁移工具一条命令完成（旧版目录指到 v1.x 的解压目录）：
+Release 压缩包内自带迁移工具 `migrate`（与 `poolsvc` 一起发布，静态编译、
+**无需安装 Go 环境**），一条命令完成迁移。旧版目录指到 v1.x 的解压目录：
 
 ```bash
-go run ./cmd/migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64
-
 # 先看看会做什么，不写文件
-go run ./cmd/migrate -from /path/to/old -dry-run
+./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64 -dry-run
+
+# 确认无误后实际执行（Windows 用 migrate.exe）
+./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64
 ```
+
+从源码构建时使用方式相同，把 `./migrate` 换成 `go run ./cmd/migrate` 即可。
 
 工具会把旧版 `auths/` 下的凭证与 `data/state.json` 里的运行态（余额、禁用、冷却、
 统计、模型冷却、成本账本）一并迁入，迁移前自动备份现有 `auths` 与 `state.json`
@@ -125,11 +129,27 @@ go run ./cmd/migrate -from /path/to/old -dry-run
 ## 下载
 
 从 [Releases](https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases) 下载
-对应平台压缩包，解压后复制配置模板并启动：
+对应平台压缩包，解压即可运行。
+
+**无需额外配置环境**：压缩包内的二进制是静态编译的单文件可执行程序，前端页面已
+内嵌其中，不依赖 Go、Node.js、PHP 或任何外部运行时，也不安装任何依赖。
+
+解压后目录内容：
+
+```text
+poolsvc-windows-amd64.zip  /  poolsvc-linux-amd64.tar.gz
+├── poolsvc          主服务（Windows 为 poolsvc.exe）
+├── migrate          旧版迁移工具（Windows 为 migrate.exe）
+├── start.bat / start.sh    启动脚本
+├── config.example.json     配置模板
+├── README.md  LICENSE  CHANGELOG.md
+```
+
+启动：
 
 ```bash
 cp config.example.json config.json
-./poolsvc            # Windows 用 pools.exe
+./poolsvc            # Windows 双击 start.bat 或运行 poolsvc.exe
 ```
 
 压缩包附带 `.sha256` 校验文件：`sha256sum -c poolsvc-linux-amd64.tar.gz.sha256`。
@@ -143,6 +163,7 @@ go test ./...
 ```
 
 打 `v*` 标签会自动触发 Release 工作流，交叉编译 Windows / Linux 产物并上传。
+日常提交只运行 CI（gofmt、vet、带竞态检测的测试、前端构建），不会产生 Release。
 
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

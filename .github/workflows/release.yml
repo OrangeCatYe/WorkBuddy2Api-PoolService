@@ -50,18 +50,29 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           version=$(git describe --tags --always)
-          out="poolsvc-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          ext="${{ matrix.ext }}"
           go build -trimpath \
             -ldflags "-s -w -X github.com/orangeruan/poolservice/internal/panelapi.Version=$version" \
-            -o "$out" ./cmd/poolsvc
-          echo "built $out ($version)"
+            -o "poolsvc-${{ matrix.os }}-${{ matrix.arch }}$ext" ./cmd/poolsvc
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/orangeruan/poolservice/internal/panelapi.Version=$version" \
+            -o "migrate-${{ matrix.os }}-${{ matrix.arch }}$ext" ./cmd/migrate
+          echo "built poolsvc + migrate ($version)"
 
       - name: 打包
         run: |
           name="poolsvc-${{ matrix.os }}-${{ matrix.arch }}"
+          ext="${{ matrix.ext }}"
           mkdir -p "dist/$name"
-          cp "poolsvc-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" "dist/$name/"
+          cp "poolsvc-${{ matrix.os }}-${{ matrix.arch }}$ext" "dist/$name/poolsvc$ext"
+          cp "migrate-${{ matrix.os }}-${{ matrix.arch }}$ext" "dist/$name/migrate$ext"
           cp config.example.json README.md LICENSE CHANGELOG.md "dist/$name/"
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            printf '@echo off\r\npoolsvc.exe %%*\r\n' > "dist/$name/start.bat"
+          else
+            printf '#!/bin/sh\nexec "$(dirname "$0")/poolsvc" "$@"\n' > "dist/$name/start.sh"
+            chmod +x "dist/$name/start.sh" "dist/$name/poolsvc" "dist/$name/migrate"
+          fi
           cd dist
           if [ "${{ matrix.os }}" = "windows" ]; then
             zip -r "../$name.zip" "$name"
@@ -108,14 +119,27 @@ jobs:
         run: |
           echo "## 安装" > notes.md
           echo "" >> notes.md
-          echo "下载对应平台的压缩包，解压后：" >> notes.md
+          echo "下载对应平台的压缩包，解压后即可使用。**两个二进制均为静态编译、自带前端资源，无需安装 Go、Node 或任何运行时。**" >> notes.md
           echo "" >> notes.md
           echo '```bash' >> notes.md
           echo "# 首次运行前复制配置模板" >> notes.md
           echo "cp config.example.json config.json" >> notes.md
-          echo "# 启动（Windows 用 pools.exe）" >> notes.md
+          echo "# 启动服务（Windows 用 poolsvc.exe）" >> notes.md
           echo "./poolsvc" >> notes.md
           echo '```' >> notes.md
+          echo "" >> notes.md
+          echo "## 从旧版 workbuddy2api-panel 迁移" >> notes.md
+          echo "" >> notes.md
+          echo "压缩包内已附带迁移工具，直接运行即可，无需 Go 环境：" >> notes.md
+          echo "" >> notes.md
+          echo '```bash' >> notes.md
+          echo "# 先预览，不写文件" >> notes.md
+          echo "./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64 -dry-run" >> notes.md
+          echo "# 确认无误后实际执行" >> notes.md
+          echo "./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64" >> notes.md
+          echo '```' >> notes.md
+          echo "" >> notes.md
+          echo "迁移后重启服务生效。" >> notes.md
           echo "" >> notes.md
           echo "## 校验" >> notes.md
           echo "" >> notes.md
