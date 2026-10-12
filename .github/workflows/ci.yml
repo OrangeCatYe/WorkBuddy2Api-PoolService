@@ -40,6 +40,25 @@ jobs:
       - name: 构建
         run: go build ./...
 
+  release-content:
+    name: 发布内容校验
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 变更记录脱敏必须无残留
+        # 分发给用户的 CHANGELOG 由该脚本生成，内部开发代号不得出现。
+        # 脚本自带残留检测，检测到会以非零码退出，这里只负责触发。
+        run: python scripts/sanitize_changelog.py CHANGELOG.md /tmp/CHANGELOG.pub.md
+
+      - name: README 不得出现内部代号
+        run: |
+          if grep -Ein '\bmock\b' README.md; then
+            echo "README.md 出现内部开发代号，发布包会带上，请改写"
+            exit 1
+          fi
+          echo "README 检查通过"
+
   frontend:
     name: 前端构建
     runs-on: ubuntu-latest

@@ -59,6 +59,12 @@ jobs:
             -o "migrate-${{ matrix.os }}-${{ matrix.arch }}$ext" ./cmd/migrate
           echo "built poolsvc + migrate ($version)"
 
+      - name: 生成发布版变更记录
+        run: |
+          # 源码 CHANGELOG 保留完整变更史；分发给用户的版本去掉内部开发代号。
+          # 脚本会在残留未脱敏内容时以非零码退出，避免新增内容漏网。
+          python scripts/sanitize_changelog.py CHANGELOG.md CHANGELOG.pub.md
+
       - name: 打包
         run: |
           name="poolsvc-${{ matrix.os }}-${{ matrix.arch }}"
@@ -66,7 +72,8 @@ jobs:
           mkdir -p "dist/$name"
           cp "poolsvc-${{ matrix.os }}-${{ matrix.arch }}$ext" "dist/$name/poolsvc$ext"
           cp "migrate-${{ matrix.os }}-${{ matrix.arch }}$ext" "dist/$name/migrate$ext"
-          cp config.example.json README.md LICENSE CHANGELOG.md "dist/$name/"
+          cp config.example.json README.md LICENSE "dist/$name/"
+          cp CHANGELOG.pub.md "dist/$name/CHANGELOG.md"
           if [ "${{ matrix.os }}" = "windows" ]; then
             printf '@echo off\r\npoolsvc.exe %%*\r\n' > "dist/$name/start.bat"
           else
