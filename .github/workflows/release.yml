@@ -117,29 +117,52 @@ jobs:
 
       - name: 生成发布说明
         run: |
-          echo "## 安装" > notes.md
-          echo "" >> notes.md
-          echo "下载对应平台的压缩包，解压后即可使用。**两个二进制均为静态编译、自带前端资源，无需安装 Go、Node 或任何运行时。**" >> notes.md
-          echo "" >> notes.md
-          echo '```bash' >> notes.md
-          echo "# 首次运行前复制配置模板" >> notes.md
-          echo "cp config.example.json config.json" >> notes.md
-          echo "# 启动服务（Windows 用 poolsvc.exe）" >> notes.md
-          echo "./poolsvc" >> notes.md
-          echo '```' >> notes.md
-          echo "" >> notes.md
-          echo "## 从旧版 workbuddy2api-panel 迁移" >> notes.md
-          echo "" >> notes.md
-          echo "压缩包内已附带迁移工具，直接运行即可，无需 Go 环境：" >> notes.md
-          echo "" >> notes.md
-          echo '```bash' >> notes.md
-          echo "# 先预览，不写文件" >> notes.md
-          echo "./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64 -dry-run" >> notes.md
-          echo "# 确认无误后实际执行" >> notes.md
-          echo "./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64" >> notes.md
-          echo '```' >> notes.md
-          echo "" >> notes.md
-          echo "迁移后重启服务生效。" >> notes.md
+          cat > notes.md <<'NOTES'
+          ## 安装
+
+          下载对应平台的压缩包，解压即可运行。
+
+          **无需额外配置环境**：包内二进制为静态编译的单文件可执行程序，前端页面已内嵌，
+          不依赖 Go、Node.js 或任何外部运行时，也无需安装依赖。
+
+          解压后目录：
+
+          ```text
+          poolsvc            主服务（Windows 为 poolsvc.exe）
+          migrate            旧版迁移工具（Windows 为 migrate.exe）
+          start.sh / start.bat   启动脚本
+          config.example.json    配置模板
+          README.md  LICENSE  CHANGELOG.md
+          ```
+
+          启动：
+
+          ```bash
+          cp config.example.json config.json
+          ./poolsvc            # Windows 双击 start.bat
+          ```
+
+          ## 从旧版 workbuddy2api-panel 迁移
+
+          包内已附带迁移工具，直接运行即可，无需 Go 环境：
+
+          ```bash
+          # 先预览，不写文件
+          ./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64 -dry-run
+
+          # 确认无误后实际执行
+          ./migrate -from /path/to/wb2api-panel-v1.11.7-windows-amd64
+          ```
+
+          迁移后重启服务生效。
+
+          ## 校验
+
+          ```bash
+          sha256sum -c poolsvc-linux-amd64.tar.gz.sha256
+          ```
+          NOTES
+          sed -i 's/^          //' notes.md
           echo "" >> notes.md
           echo "## 校验" >> notes.md
           echo "" >> notes.md
@@ -151,7 +174,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --title "${GITHUB_REF_NAME}" \
+          tag="${GITHUB_REF_NAME}"
+          # 同标签重复构建时先清理旧 Release，避免草稿堆叠
+          gh release delete "$tag" --yes 2>/dev/null || true
+          gh release create "$tag" \
+            --title "$tag" \
             --notes-file notes.md \
             artifacts/*
