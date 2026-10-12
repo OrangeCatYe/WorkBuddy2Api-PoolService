@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: 后端检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.4'
+          cache: true
+
+      - name: 格式检查
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未通过 gofmt："
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: 单元测试
+        run: go test ./...
+
+      - name: 竞态检测
+        # 本机无 C 编译器跑不了 -race（P5 遗留限制），GitHub runner 自带 gcc，在 CI 补齐。
+        run: go test -race ./...
+
+      - name: 构建
+        run: go build ./...
+
+  frontend:
+    name: 前端构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 安装依赖
+        run: npm --prefix web install
+
+      - name: 类型检查
+        run: npm --prefix web run typecheck
+
+      - name: 构建
+        run: npm --prefix web run build

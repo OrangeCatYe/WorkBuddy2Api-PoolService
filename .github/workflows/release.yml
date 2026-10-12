@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建 ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows
+            arch: amd64
+            ext: .exe
+          - os: linux
+            arch: amd64
+            ext: ''
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 需要完整标签历史：版本号由 git describe 注入二进制。
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.4'
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 构建前端
+        run: |
+          npm --prefix web install
+          npm --prefix web run build
+
+      - name: 交叉编译
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          version=$(git describe --tags --always)
+          out="poolsvc-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
+          go build -trimpath \
+            -ldflags "-s -w -X github.com/orangeruan/poolservice/internal/panelapi.Version=$version" \
+            -o "$out" ./cmd/poolsvc
+          echo "built $out ($version)"
+
+      - name: 打包
+        run: |
+          name="poolsvc-${{ matrix.os }}-${{ matrix.arch }}"
+          mkdir -p "dist/$name"
+          cp "poolsvc-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}" "dist/$name/"
+          cp config.example.json README.md LICENSE CHANGELOG.md "dist/$name/"
+          cd dist
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            zip -r "../$name.zip" "$name"
+            echo "asset=$name.zip" >> "$GITHUB_OUTPUT"
+          else
+            tar -czf "../$name.tar.gz" "$name"
+            echo "asset=$name.tar.gz" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 校验和
+        working-directory: .
+        run: |
+          name="poolsvc-${{ matrix.os }}-${{ matrix.arch }}"
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            sha256sum "$name.zip" > "$name.zip.sha256"
+          else
+            sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: poolsvc-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            poolsvc-${{ matrix.os }}-${{ matrix.arch }}.zip
+            poolsvc-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            *.sha256
+          if-no-files-found: ignore
+
+  release:
+    name: 发布 Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: 生成发布说明
+        run: |
+          echo "## 安装" > notes.md
+          echo "" >> notes.md
+          echo "下载对应平台的压缩包，解压后：" >> notes.md
+          echo "" >> notes.md
+          echo '```bash' >> notes.md
+          echo "# 首次运行前复制配置模板" >> notes.md
+          echo "cp config.example.json config.json" >> notes.md
+          echo "# 启动（Windows 用 pools.exe）" >> notes.md
+          echo "./poolsvc" >> notes.md
+          echo '```' >> notes.md
+          echo "" >> notes.md
+          echo "## 校验" >> notes.md
+          echo "" >> notes.md
+          echo "```bash" >> notes.md
+          echo "sha256sum -c poolsvc-linux-amd64.tar.gz.sha256" >> notes.md
+          echo "```" >> notes.md
+
+      - name: 创建 Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file notes.md \
+            artifacts/*
