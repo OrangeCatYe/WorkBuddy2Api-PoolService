@@ -13,6 +13,9 @@
 - 仓库公开到 GitHub，提交身份统一改为个人账号
 - F1.5 明确不提供模拟 / 演示平台
 
+### 修复
+- 未添加任何账号时打开积分中心整页崩溃（`Cannot read properties of null (reading 'map')`）：Go 的 nil slice 序列化成 `null`，空账号时 `/api/credits` 的 `accounts` 字段是 `null`，前端直接 `.map` 导致白屏。后端改为返回空数组，前端同步加兜底，空态正常显示「还没有带积分的账号」
+
 ## [0.6.3] - 2026-10-10
 
 ### 移除

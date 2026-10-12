@@ -58,7 +58,7 @@ function Summary({ s }: { s: CreditsSnapshot }) {
 
 function CalendarChart({ s }: { s: CreditsSnapshot }) {
   const [hover, setHover] = useState<number | null>(null)
-  const days = s.calendar
+  const days = s.calendar ?? []
   const max = Math.max(1, ...days.map((d) => d.expiring))
   const h = hover !== null ? days[hover] : null
   const label = (d: string) => {
@@ -204,6 +204,7 @@ function PackagesDrawer({ a, onClose }: { a: AccountForecast; onClose: () => voi
 
 function AccountsTable({ s }: { s: CreditsSnapshot }) {
   const [open, setOpen] = useState<AccountForecast | null>(null)
+  const accounts = s.accounts ?? []
   return (
     <Card className="overflow-x-auto">
       <CardHeader title="账号预测" hint="按到期压力排序；点击查看每个积分包的预测" />
@@ -220,7 +221,7 @@ function AccountsTable({ s }: { s: CreditsSnapshot }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-line">
-          {s.accounts.map((a) => (
+          {accounts.map((a) => (
             <tr key={a.provider + a.account_id} onClick={() => setOpen(a)} className="cursor-pointer text-[13px] hover:bg-sunken/40">
               <td className="py-2.5 pl-5">
                 <div className="flex items-center gap-2">
@@ -258,7 +259,7 @@ function AccountsTable({ s }: { s: CreditsSnapshot }) {
           ))}
         </tbody>
       </table>
-      {!s.accounts.length && <Empty icon={<Coins size={28} />} title="还没有带积分的账号" />}
+      {!accounts.length && <Empty icon={<Coins size={28} />} title="还没有带积分的账号" />}
       {open && <PackagesDrawer a={open} onClose={() => setOpen(null)} />}
     </Card>
   )

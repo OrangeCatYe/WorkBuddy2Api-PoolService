@@ -129,6 +129,8 @@ const urgencyTau = 5.0
 func New(cfg func() *config.Config, reg *provider.Registry, catalog *router.Catalog, ledger *Ledger) *Service {
 	s := &Service{
 		cfg: cfg, reg: reg, catalog: catalog, ledger: ledger, now: time.Now,
+		// 初始快照也用空数组：Refresh 尚未跑完时若被读取，字段不会是 null。
+		snap:  Snapshot{Accounts: []AccountForecast{}, Calendar: []CalendarDay{}, Tunable: []string{}},
 		state: map[string]acctState{}, rates: map[string]float64{},
 		decisions: make([]Decision, decisionCap), reserveApplied: map[string]float64{},
 		kick: make(chan struct{}, 1),
@@ -221,8 +223,9 @@ func (s *Service) Refresh(ctx context.Context) {
 		}
 	}
 
-	var accts []AccountForecast
-	var tunable []string
+	// 声明为空数组而非 nil：nil slice 会被序列化成 null，前端直接 .map 会崩。
+	accts := []AccountForecast{}
+	tunable := []string{}
 	for _, p := range s.reg.List() {
 		pid := p.Meta().ID
 		if _, ok := p.(provider.RoutingTunable); ok {

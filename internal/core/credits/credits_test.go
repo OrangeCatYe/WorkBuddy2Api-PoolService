@@ -2,7 +2,9 @@ package credits
 
 import (
 	"context"
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,5 +194,34 @@ func TestServiceBiasAndDecisions(t *testing.T) {
 	s.Refresh(context.Background())
 	if b := fp.bias("hot", "cheap"); b != 1 {
 		t.Fatalf("off bias = %v", b)
+	}
+}
+
+// 空池子必须返回空数组而不是 null：nil slice 经 JSON 序列化后是 null，
+// 前端直接 .map 会整页崩溃（新用户未添加账号时的 /credits 白屏）。
+func TestEmptySnapshotSerializesToArrays(t *testing.T) {
+	cfg := config.Default()
+	s := New(func() *config.Config { return cfg }, provider.NewRegistry(), nil, NewLedger(t0))
+	s.now = func() time.Time { return t0 }
+
+	// 初始快照：Refresh 尚未跑过时也不能是 null
+	if b, err := json.Marshal(s.Snapshot()); err != nil {
+		t.Fatal(err)
+	} else if strings.Contains(string(b), "null") {
+		t.Fatalf("初始快照含 null：%s", b)
+	}
+
+	s.Refresh(context.Background())
+	b, err := json.Marshal(s.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "null") {
+		t.Fatalf("空账号快照含 null：%s", b)
+	}
+	for _, field := range []string{`"accounts":[]`, `"calendar":[`, `"tunable_providers":[]`} {
+		if !strings.Contains(string(b), field) {
+			t.Fatalf("缺少 %s：%s", field, b)
+		}
 	}
 }
