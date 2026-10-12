@@ -165,6 +165,15 @@ go test ./...
 打 `v*` 标签会自动触发 Release 工作流，交叉编译 Windows / Linux 产物并上传。
 日常提交只运行 CI（gofmt、vet、带竞态检测的测试、前端构建），不会产生 Release。
 
+提交前可先跑本地预检，覆盖 CI 除竞态检测外的全部检查，十几秒出结果，不必等远端：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precheck.ps1          # 全量，约 15s
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precheck.ps1 -Quick   # 快速，约 5s，跳过 go test 与前端构建
+```
+
+唯一跑不了的是 `go test -race`：它需要 C 编译器（gcc），本机没有，由 CI 补齐。遇到并发相关的改动，仍需看一次 CI 结果。
+
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 新平台接入：[docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)
