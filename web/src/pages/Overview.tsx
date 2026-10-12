@@ -121,7 +121,7 @@ function buildAlerts(accounts: Account[] | undefined, cr: CreditsSnapshot | unde
       tone: 'warn',
       icon: <Flame size={15} />,
       title: `按当前速度会浪费 ${fmtNum(p.waste)} 积分`,
-      hint: `日均 ${fmtNum(Math.round(p.burn_per_day))}，零浪费需要 ${fmtNum(Math.ceil(p.required_per_day))}`,
+  hint: `日均 ${fmtNum(p.burn_per_day)}，零浪费需要 ${fmtNum(Math.ceil(p.required_per_day))}`,
       to: '/credits',
     })
   }
@@ -192,7 +192,7 @@ function Traffic({ u }: { u?: UsageStats }) {
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
             {[
               ['请求', fmtNum(t.requests), `成功率 ${okRate.toFixed(okRate === 100 ? 0 : 1)}%`],
-              ['消耗积分', fmtNum(Math.round(t.credit * 100) / 100), t.requests ? `平均 ${(t.credit / t.requests).toFixed(2)} / 次` : ''],
+              ['消耗积分', fmtNum(t.credit), t.requests ? `平均 ${fmtNum(t.credit / t.requests)} / 次` : ''],
               ['Token', fmtTokens(t.prompt_tokens + t.completion_tokens), `缓存命中 ${cacheRate.toFixed(0)}%`],
               ['首字延迟', t.avg_ttfb_ms ? `${(t.avg_ttfb_ms / 1000).toFixed(1)}s` : '—', '平均'],
             ].map(([k, v, s]) => (

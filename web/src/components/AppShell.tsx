@@ -19,6 +19,7 @@ import {
 import type { ReactNode } from 'react'
 import { useMeta, useOverview } from '@/lib/queries'
 import { useTheme } from '@/lib/theme'
+import { useCreditPrecision } from '@/lib/creditDisplay'
 import { cx } from './ui'
 
 type NavItem = { to: string; label: string; icon: ReactNode; end?: boolean }
@@ -155,6 +156,8 @@ export function AppShell() {
   const loc = useLocation()
   const title = titles[loc.pathname] ?? ''
   const [navOpen, setNavOpen] = useState(false)
+  // fmtNum 是纯函数，这里订阅精度，切换时让整棵子树重渲染
+  useCreditPrecision()
 
   useEffect(() => setNavOpen(false), [loc.pathname])
   useEffect(() => {

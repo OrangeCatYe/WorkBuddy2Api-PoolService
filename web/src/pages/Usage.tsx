@@ -146,7 +146,7 @@ export function UsagePage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="请求" value={fmtNum(t.requests)} sub={t.requests ? `成功率 ${success.toFixed(1)}%` : '暂无请求'} tone={t.requests && success < 90 ? 'bad' : undefined} />
-        <Kpi label="消耗积分" value={fmtNum(t.credit)} sub={t.requests ? `平均每次 ${(t.credit / t.requests).toFixed(2)}` : undefined} />
+        <Kpi label="消耗积分" value={fmtNum(t.credit)} sub={t.requests ? `平均每次 ${fmtNum(t.credit / t.requests)}` : undefined} />
         <Kpi label="Token" value={fmtTokens(t.prompt_tokens + t.completion_tokens) || '0'} sub={`输入 ${fmtTokens(t.prompt_tokens) || 0} · 输出 ${fmtTokens(t.completion_tokens) || 0}`} />
         <Kpi label="缓存命中" value={`${cache.toFixed(1)}%`} sub={t.avg_ttfb_ms ? `平均首字 ${(t.avg_ttfb_ms / 1000).toFixed(2)}s` : undefined} />
       </div>

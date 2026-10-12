@@ -47,7 +47,7 @@ function Summary({ s }: { s: CreditsSnapshot }) {
         tone={p.waste >= 1 ? 'bad' : 'ok'}
         sub={saved >= 1 ? `按到期统一调度可降到 ${fmtNum(p.ideal_waste)}` : p.waste >= 1 ? '按当前速度，到期前用不完' : '按当前速度可全部用完'}
       />
-      <Kpi label="日均消耗" value={fmtNum(Math.round(p.burn_per_day * 10) / 10)} sub={p.required_per_day > 0 ? `零浪费需要每天 ${fmtNum(Math.ceil(p.required_per_day))}` : '没有会过期的积分'}>
+<Kpi label="日均消耗" value={fmtNum(p.burn_per_day)} sub={p.required_per_day > 0 ? `零浪费需要每天 ${fmtNum(Math.ceil(p.required_per_day))}` : '没有会过期的积分'}>
         {p.required_per_day > 0 && <Meter className="mt-2.5" value={pace} tone={pace >= 100 ? 'ok' : pace >= 60 ? 'warn' : 'bad'} />}
       </Kpi>
     </div>
@@ -160,7 +160,7 @@ function PackagesDrawer({ a, onClose }: { a: AccountForecast; onClose: () => voi
       <div className="grid grid-cols-3 gap-2">
         {[
           ['余额', fmtNum(a.remaining)],
-          ['日均消耗', fmtNum(Math.round(a.burn_per_day * 10) / 10)],
+  ['日均消耗', fmtNum(a.burn_per_day)],
           ['预计浪费', fmtNum(a.waste)],
         ].map(([k, v]) => (
           <div key={k} className="rounded-xl bg-sunken/70 px-3 py-2.5">
@@ -171,7 +171,7 @@ function PackagesDrawer({ a, onClose }: { a: AccountForecast; onClose: () => voi
       </div>
       <p className="mt-3 text-[12.5px] text-muted">
         {a.burn_per_day > 0
-          ? `按每天 ${fmtNum(Math.round(a.burn_per_day))} 的速度、先到期先扣的顺序模拟；${a.exhaust_at ? `约 ${fmtDays(a.exhaust_at)}后用完` : ''}`
+  ? `按每天 ${fmtNum(a.burn_per_day)} 的速度、先到期先扣的顺序模拟；${a.exhaust_at ? `约 ${fmtDays(a.exhaust_at)}后用完` : ''}`
           : '最近没有消耗记录，会过期的积分都将浪费。'}
         {a.required_per_day > 0 && ` 零浪费需要每天 ${fmtNum(Math.ceil(a.required_per_day))}。`}
       </p>
@@ -238,7 +238,7 @@ function AccountsTable({ s }: { s: CreditsSnapshot }) {
                 <Spark data={a.series ?? []} />
               </td>
               <td className="num px-3 py-2.5 text-right">
-                {fmtNum(Math.round(a.burn_per_day * 10) / 10)}
+                {fmtNum(a.burn_per_day)}
                 <div className="text-[11.5px] text-faint">{a.exhaust_at ? `${fmtDays(a.exhaust_at)}后用完` : `今日 ${fmtNum(a.today_credit)}`}</div>
               </td>
               <td className="num px-3 py-2.5 text-right">

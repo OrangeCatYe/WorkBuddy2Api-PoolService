@@ -1,10 +1,26 @@
-const nf = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 1 })
+import { getCreditPrecision } from './creditDisplay'
 
-/** 积分 / 数量：1.2万 以上用「万」。 */
+/**
+ * 积分：始终显示完整数值，不再折算成「万」。
+ * 上游单次消耗常只有几分到十几分，万为单位会把它们压成 0。
+ * 小数位数由设置里的精度开关决定（默认整数个位）。
+ *
+ * 这里是纯函数：调用点遍布各处且存在条件调用（如 `x >= 1 ? fmtNum(x) : '0'`），
+ * 不能用 hook。精度切换时由 AppShell 订阅并触发整棵子树重渲染。
+ */
 export function fmtNum(n: number | undefined | null): string {
   if (n === undefined || n === null || Number.isNaN(n)) return '—'
-  if (Math.abs(n) >= 10000) return `${nf.format(n / 10000)}万`
-  return nf.format(n)
+  return formatCredit(n, getCreditPrecision())
+}
+
+/** 按指定精度格式化积分；大数加千分位便于阅读。 */
+export function formatCredit(n: number | undefined | null, precision: 'int' | 'two'): string {
+  if (n === undefined || n === null || Number.isNaN(n)) return '—'
+  const digits = precision === 'two' ? 2 : 0
+  return new Intl.NumberFormat('zh-CN', {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(n)
 }
 
 export function fmtTokens(n: number | undefined): string {

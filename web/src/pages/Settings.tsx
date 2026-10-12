@@ -5,6 +5,8 @@ import { AlertTriangle, ArrowUpRight, RotateCcw, RotateCw, Search } from 'lucide
 import { api } from '@/lib/api'
 import { useGatewaySettings, useMeta, useModels, useProviderSettings } from '@/lib/queries'
 import { Segmented, Switch, useToast } from '@/components/overlay'
+import { formatCredit } from '@/lib/format'
+import { setCreditPrecision, useCreditPrecision } from '@/lib/creditDisplay'
 import { Badge, Button, Card, CardHeader, Empty, Skeleton, cx } from '@/components/ui'
 import type { GatewaySettings, ProviderSettings, SettingField } from '@/types'
 
@@ -19,6 +21,22 @@ function SettingRow({ title, hint, control, badge, disabled, stacked }: { title:
         {hint && <div className="mt-0.5 text-[12.5px] text-muted">{hint}</div>}
       </div>
       <div className={cx('shrink-0', !stacked && 'sm:pt-0.5')}>{control}</div>
+    </div>
+  )
+}
+
+// ---------------- 显示偏好 ----------------
+
+function CreditPrecisionToggle() {
+  const p = useCreditPrecision()
+  const two = p === 'two'
+  const samples = [12.34, 8, 12580]
+  return (
+    <div className="flex flex-col items-end gap-1.5">
+      <Switch checked={two} onChange={(v) => setCreditPrecision(v ? 'two' : 'int')} />
+      <div className="num text-[11.5px] text-faint">
+        {samples.map((s) => formatCredit(s, p)).join(' · ')}
+      </div>
     </div>
   )
 }
@@ -91,6 +109,16 @@ function GatewayTab() {
             )}
           </div>
         )}
+      </Card>
+      <Card>
+        <CardHeader title="显示" hint="仅影响本浏览器界面，不改接口数据" />
+        <div className="divide-y divide-line border-t border-line">
+          <SettingRow
+            title="积分显示精度"
+            hint="默认显示到个位；开启两位小数可看清几分级别的消耗，与上游账单一致"
+            control={<CreditPrecisionToggle />}
+          />
+        </div>
       </Card>
       <Card>
         <CardHeader title="其他设置" />
