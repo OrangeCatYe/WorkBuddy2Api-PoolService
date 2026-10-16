@@ -157,9 +157,17 @@ ttswitch 解析字段（含别名）与本项目输出：
 
 Docker 镜像推迟到 v1.0 之后（本机开发环境不允许运行 Docker，无法验证）。
 
+> **P0–P7 已全部完成（v1.0.0，2026-10-12）。** 此后为维护与增量演进阶段，
+> 开发规则见 [DEVELOPMENT.md](DEVELOPMENT.md)，分支与版本管理见
+> [BRANCHING.md](BRANCHING.md)。上表中"推迟"且至今未实现的项
+> （Docker、命令面板、ECharts、第二个 Provider）列在 DEVELOPMENT.md §6。
+
 ## 7. 已确认决策（2026-10-10）
 1. 先接入 WorkBuddy。不同平台的接入方式差异大，框架只规定能力接口，登录方式由适配器自行声明（见 [PROVIDER_GUIDE.md](PROVIDER_GUIDE.md)）。
 2. 同时提供多种协议入口：OpenAI Chat Completions、Anthropic Messages、OpenAI Responses，满足不经 ttswitch 直接使用的场景（P3）。
 3. 发布到 GitHub，优先支持 Windows 与 Linux 单二进制；Docker 后续提供。
 4. 模型 ID 默认短名，兼容 `cn:` 旧前缀；新增开关 `gateway.credit_in_model_name`，开启后模型 ID 与显示名附加积分倍率（如 `glm-5.2(x0.05)`）。倍率会随限时优惠变化，网关解析时会剥离倍率后缀，客户端保存的旧名始终可用。
 5. 全程 git 管理：每阶段一个 `feat/*` 分支，`--no-ff` 合并回 `main` 并打版本标签。
+   **已于 2026-10-12 调整为单主干开发**（P0–P7 完成后）：只保留 `main` 长期分支，
+   临时分支合并后即删，历史 `feat/*` / `fix/*` / `chore/*` 分支已清理。
+   新能力仍需先写提案，见 [DEVELOPMENT.md](DEVELOPMENT.md)。
