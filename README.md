@@ -1,8 +1,100 @@
 # PoolService
 
-多平台 AI 编程助手账号池网关：把 WorkBuddy / CodeBuddy 等软件的账号聚合成统一的 OpenAI 兼容 API，供 ttswitch 等 Agent 路由工具接入，并提供积分中心与 Web 管理面板。
+<p align="center">
+  <img src="docs/images/cover.png" alt="PoolService 产品展示：深色桌面概览与浅色移动端账号管理界面" width="100%">
+</p>
 
-> 基于 [workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)（MIT）重构，仅限管理本人账号使用，请遵守各平台服务协议。
+<p align="center"><strong>账号有序，积分可见，接入更简单。</strong></p>
+<p align="center">把 WorkBuddy 账号聚合成统一的 AI 编程网关，用一个清晰的面板管理账号、积分与请求。</p>
+<p align="center">
+  <a href="https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases/latest">下载最新版</a> ·
+  <a href="#界面导览">看看界面</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="docs/API.md">API 文档</a> ·
+  <a href="CHANGELOG.md">更新记录</a>
+</p>
+<p align="center"><sub>Windows / Linux · 单文件运行 · 三种 API 协议 · 明暗主题 · 移动端适配 · MIT</sub></p>
+
+## 这是什么软件？
+
+PoolService 是一个**运行在本机的账号池网关与 Web 管理面板**，不是聊天客户端，也不是账号售卖服务。把本人拥有的 WorkBuddy 账号加入池中后，就可以通过统一 API 接入 ttswitch、Claude Code 或 Codex CLI，并在浏览器里查看额度、管理账号和排查请求。
+
+当前支持 **WorkBuddy 国内版 / 国际版**；多平台适配框架已就绪，其他平台尚未接入。
+
+<p align="center">
+  <img src="docs/images/flow.svg" alt="接入关系：本人 WorkBuddy 账号 → PoolService 账号池与多协议网关 → ttswitch、Claude Code、Codex CLI" width="100%">
+</p>
+
+| 你关心的事 | PoolService 如何帮助你 |
+|---|---|
+| 账号多，状态不好掌握 | 统一查看可用、冷却、暂停状态，支持搜索、排序与批量操作 |
+| 积分看不清，快到期才发现 | 完整数值显示、到期日历、消耗预测与到期优先调度 |
+| 不同编程工具配置麻烦 | 同一网关提供三种 API 协议，面板内复制接入配置 |
+| 请求消耗与失败原因不透明 | 请求日志与用量分析，按模型、账号、密钥、协议拆分 |
+| 不想搭建复杂运行环境 | 下载、解压即可运行，前端已内嵌，无需安装 Go 或 Node.js |
+
+> 基于 [workbuddy2api-panel](https://github.com/linguo2625469/workbuddy2api-panel)（MIT）重构。仅限管理本人账号使用，请遵守各平台服务协议。
+
+## 界面导览
+
+以下均为**当前前端实际渲染的界面**，使用独立、虚构的示例数据拍摄，不包含真实账号、凭证或个人用量。截图中的模型、倍率、余额与预测仅用于说明界面，实际以账号权限、上游目录及运行数据为准。点击图片可查看高清原图。
+
+### 一眼掌握账号池的运行状态
+
+概览把剩余积分、近期到期、预计浪费与可用账号放在最上方；需要关注的异常、近 24 小时请求趋势、近期积分包与最近请求集中展示，不必逐页寻找。
+
+[![PoolService 浅色概览：积分指标、账号异常提醒、请求趋势和近期到期积分](docs/images/overview-light.png)](docs/images/overview-light.png)
+
+### 把积分用在到期之前
+
+积分中心不只展示余额，还提供 **30 天到期日历、账号消耗趋势与浪费预测**。到期优先策略可调节权重、每日上限和余额保底；选号回放让每次分配都有迹可循。
+
+积分默认显示到整数个位，也可以在设置中切换为两位小数，不再用「万」隐藏小额消耗。
+
+[![PoolService 积分中心：到期日历、账号预测、到期优先策略与选号回放](docs/images/credits.png)](docs/images/credits.png)
+
+### 账号管理与客户端接入，各有清晰入口
+
+<table>
+  <tr>
+    <th width="50%">账号管理</th>
+    <th width="50%">接入与密钥</th>
+  </tr>
+  <tr>
+    <td><a href="docs/images/accounts.png"><img src="docs/images/accounts.png" alt="账号列表：状态筛选、积分与到期信息，以及批量操作栏" width="100%"></a></td>
+    <td><a href="docs/images/gateway.png"><img src="docs/images/gateway.png" alt="接入与密钥：客户端配置向导、独立密钥、RPM 与积分预算" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td>按状态筛选、按余额或到期时间排序，批量刷新、签到、暂停与恢复；点击账号查看详情。</td>
+    <td>复制 ttswitch、Claude Code、Codex CLI 配置；按密钥限制模型、速率和积分预算。</td>
+  </tr>
+</table>
+
+### 知道请求花在哪，也知道模型能做什么
+
+<table>
+  <tr>
+    <th width="50%">用量分析</th>
+    <th width="50%">模型目录</th>
+  </tr>
+  <tr>
+    <td><a href="docs/images/usage.png"><img src="docs/images/usage.png" alt="用量分析：按小时请求趋势、积分与 Token、模型及账号消耗拆分" width="100%"></a></td>
+    <td><a href="docs/images/models.png"><img src="docs/images/models.png" alt="模型目录：上下文、最大输出、工具调用、视觉、思考档位与倍率" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td>查看成功率、缓存命中与首字延迟，按模型、账号、密钥和协议定位消耗来源。</td>
+    <td>筛选工具调用、视觉与思考能力，对照上下文、最大输出和积分倍率选择模型。</td>
+  </tr>
+</table>
+
+<details>
+<summary>查看深色主题与移动端界面</summary>
+
+<p>浅色采用暖纸与琥珀配色，深色切换为深炭底色；窄屏使用抽屉导航和账号卡片列表。</p>
+<p><a href="docs/images/overview-dark.png"><img src="docs/images/overview-dark.png" alt="PoolService 深色主题概览" width="100%"></a></p>
+<p align="center"><a href="docs/images/mobile-accounts.png"><img src="docs/images/mobile-accounts.png" alt="PoolService 390px 移动端账号卡片列表" width="280"></a></p>
+
+</details>
 
 ## 功能
 
@@ -11,13 +103,50 @@
 - **下游密钥**：按密钥限制模型、RPM 与每日 / 累计积分，独立统计用量。
 - **请求日志与用量分析**：每个请求的账号、token、缓存命中、积分、耗时一目了然（不记录对话内容）。
 - **积分中心**：预测每批积分到期前能否用完，按到期压力把收费请求优先分给快过期的账号，每次选号都能回放原因。详见 [docs/CREDITS.md](docs/CREDITS.md)。
+- **积分显示精度**：完整显示积分，默认到个位；设置中可切换两位小数，全站即时联动。
 - **模型名显示积分倍率**：可选在模型名后附加倍率，如 `glm-5.2(x0.05)`，在 Agent 里直接看到成本。
 - **账号池**：沿用原项目的冷却、熔断、会话粘性、快过期积分优先等策略；签到、保活、猫猫旅行等定时任务。
-- **Web 面板**：概览、账号（批量操作、积分包到期）、模型目录、任务、设置；明暗主题。
+- **Web 面板**：概览、账号（批量操作、积分包到期）、模型目录、任务、设置；明暗主题与移动端适配。
+
+## 下载
+
+从 [最新版 Release](https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases/latest) 下载对应平台压缩包，解压即可运行。
+
+| 系统 | 下载文件 | 启动方式 |
+|---|---|---|
+| Windows x64 | `poolsvc-windows-amd64.zip` | 双击 `start.bat`，或运行 `poolsvc.exe` |
+| Linux x64 | `poolsvc-linux-amd64.tar.gz` | 运行 `start.sh`，或执行 `./poolsvc` |
+
+**无需额外配置环境**：压缩包内的二进制是静态编译的单文件可执行程序，前端页面已内嵌其中，不依赖 Go、Node.js、PHP 或任何外部运行时，也不安装任何依赖。
+
+解压后目录内容：
+
+```text
+poolsvc-windows-amd64.zip  /  poolsvc-linux-amd64.tar.gz
+├── poolsvc          主服务（Windows 为 poolsvc.exe）
+├── migrate          旧版迁移工具（Windows 为 migrate.exe）
+├── start.bat / start.sh    启动脚本
+├── config.example.json     配置模板
+├── README.md  LICENSE  CHANGELOG.md
+```
+
+启动：
+
+```bash
+cp config.example.json config.json
+./poolsvc            # Windows 双击 start.bat 或运行 poolsvc.exe
+```
+
+压缩包附带 `.sha256` 校验文件：`sha256sum -c poolsvc-linux-amd64.tar.gz.sha256`。
 
 ## 快速开始
 
-从 Release 下载对应平台的二进制，或自行构建：
+1. 从 [Release](https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases/latest) 下载并启动对应平台程序。
+2. 打开面板 `http://127.0.0.1:7863`，输入启动日志中的面板管理密钥。
+3. 在「账号 → 添加账号」选择「国内版授权」，在弹出的页面完成登录。
+4. 在「接入与密钥」创建 API Key，复制所用客户端的配置即可接入。
+
+也可以自行构建：
 
 ```bash
 # Windows
@@ -32,8 +161,6 @@ scripts/build.sh
 ./bin/poolsvc -config config.json
 # 面板: http://127.0.0.1:7863
 ```
-
-在面板「账号 → 添加账号」中选择「国内版授权」，在弹出的页面完成登录，账号即自动加入池中。
 
 ## 配置
 
@@ -100,8 +227,7 @@ env_key = "POOLSVC_API_KEY"
 
 ## 从 workbuddy2api-panel 迁移
 
-Release 压缩包内自带迁移工具 `migrate`（与 `poolsvc` 一起发布，静态编译、
-**无需安装 Go 环境**），一条命令完成迁移。旧版目录指到 v1.x 的解压目录：
+Release 压缩包内自带迁移工具 `migrate`（与 `poolsvc` 一起发布，静态编译、**无需安装 Go 环境**），一条命令完成迁移。旧版目录指到 v1.x 的解压目录：
 
 ```bash
 # 先看看会做什么，不写文件
@@ -113,10 +239,7 @@ Release 压缩包内自带迁移工具 `migrate`（与 `poolsvc` 一起发布，
 
 从源码构建时使用方式相同，把 `./migrate` 换成 `go run ./cmd/migrate` 即可。
 
-工具会把旧版 `auths/` 下的凭证与 `data/state.json` 里的运行态（余额、禁用、冷却、
-统计、模型冷却、成本账本）一并迁入，迁移前自动备份现有 `auths` 与 `state.json`
-到 `data/backup/`。同 UID 已存在时保留令牌较新的一方，避免用过期凭证覆盖有效
-凭证；加 `-force` 改为旧版无条件覆盖。
+工具会把旧版 `auths/` 下的凭证与 `data/state.json` 里的运行态（余额、禁用、冷却、统计、模型冷却、成本账本）一并迁入，迁移前自动备份现有 `auths` 与 `state.json` 到 `data/backup/`。同 UID 已存在时保留令牌较新的一方，避免用过期凭证覆盖有效凭证；加 `-force` 改为旧版无条件覆盖。
 
 迁移后重启服务生效。旧版客户端使用的 `cn:glm-5.2` 这类模型名仍然可用。
 
@@ -126,34 +249,6 @@ Release 压缩包内自带迁移工具 `migrate`（与 `poolsvc` 一起发布，
 2. 可选：把旧 `data/state.json` 复制到 `data/workbuddy/state.json`，保留冷却与统计状态。
 3. 旧 `config.json` 中的 `pool`、`schedule`、`upstream`、`global`、`prompt` 等段落原样放进 `providers.workbuddy`。
 
-## 下载
-
-从 [Releases](https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases) 下载
-对应平台压缩包，解压即可运行。
-
-**无需额外配置环境**：压缩包内的二进制是静态编译的单文件可执行程序，前端页面已
-内嵌其中，不依赖 Go、Node.js、PHP 或任何外部运行时，也不安装任何依赖。
-
-解压后目录内容：
-
-```text
-poolsvc-windows-amd64.zip  /  poolsvc-linux-amd64.tar.gz
-├── poolsvc          主服务（Windows 为 poolsvc.exe）
-├── migrate          旧版迁移工具（Windows 为 migrate.exe）
-├── start.bat / start.sh    启动脚本
-├── config.example.json     配置模板
-├── README.md  LICENSE  CHANGELOG.md
-```
-
-启动：
-
-```bash
-cp config.example.json config.json
-./poolsvc            # Windows 双击 start.bat 或运行 poolsvc.exe
-```
-
-压缩包附带 `.sha256` 校验文件：`sha256sum -c poolsvc-linux-amd64.tar.gz.sha256`。
-
 ## 开发
 
 ```bash
@@ -162,8 +257,7 @@ npm --prefix web run dev          # 前端开发服务器，代理到 127.0.0.1:
 go test ./...
 ```
 
-打 `v*` 标签会自动触发 Release 工作流，交叉编译 Windows / Linux 产物并上传。
-日常提交只运行 CI（gofmt、vet、带竞态检测的测试、前端构建），不会产生 Release。
+打 `v*` 标签会自动触发 Release 工作流，交叉编译 Windows / Linux 产物并上传。日常提交只运行 CI（gofmt、vet、带竞态检测的测试、前端构建），不会产生 Release。
 
 提交前可先跑本地预检，覆盖 CI 除竞态检测外的全部检查，十几秒出结果，不必等远端：
 
@@ -179,4 +273,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precheck.ps1 -Quick 
 - 后续开发规则：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 分支与版本管理：[docs/BRANCHING.md](docs/BRANCHING.md)
 - 新平台接入：[docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)
+- 界面素材维护：[docs/SHOWCASE.md](docs/SHOWCASE.md)
 - 变更记录：[CHANGELOG.md](CHANGELOG.md)
