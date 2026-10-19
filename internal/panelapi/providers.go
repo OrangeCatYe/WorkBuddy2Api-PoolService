@@ -21,6 +21,7 @@ func (a *API) registerProviderRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/providers/{pid}/login/{sid}", a.auth(a.loginPoll))
 	mux.HandleFunc("POST /api/providers/{pid}/accounts/{aid}/actions/{action}", a.auth(a.accountAction))
 	mux.HandleFunc("POST /api/providers/{pid}/actions/{action}", a.auth(a.bulkAction))
+	mux.HandleFunc("POST /api/providers/{pid}/export", a.auth(a.exportAccounts))
 	mux.HandleFunc("POST /api/providers/{pid}/accounts/{aid}/quota", a.auth(a.refreshQuota))
 	mux.HandleFunc("POST /api/providers/{pid}/tasks/{tid}/run", a.auth(a.runTask))
 }

@@ -16,7 +16,7 @@ const now = Date.parse('2026-10-16T10:00:00+08:00')
 const iso = (days = 0, minutes = 0) => new Date(now + days * 86400000 + minutes * 60000).toISOString()
 const sum = (xs, key) => xs.reduce((n, x) => n + (x[key] ?? 0), 0)
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
-const provider = { id: 'workbuddy', name: 'WorkBuddy', description: '国内版 / 国际版账号池', capabilities: ['quota', 'actions', 'tasks', 'settings'] }
+const provider = { id: 'workbuddy', name: 'WorkBuddy', description: '国内版 / 国际版账号池', capabilities: ['quota', 'actions', 'tasks', 'settings', 'export'] }
 const labels = ['日常编程', '长上下文', '工具调用', '项目重构', '轻量任务', '代码审查', '备用账号', '旅行补给']
 const balances = [4820, 3650, 2940, 2360, 1870, 1420, 980, 760]
 const statuses = ['active', 'active', 'active', 'active', 'active', 'active', 'cooling', 'paused']
@@ -121,7 +121,11 @@ const fixtures = {
   '/api/providers/workbuddy': { meta: provider, actions: [
     { id: 'refresh', name: '刷新余额', bulk: true }, { id: 'checkin', name: '签到', bulk: true },
     { id: 'pause', name: '暂停', bulk: true }, { id: 'resume', name: '恢复', bulk: true },
-  ], tasks: [], login_methods: [] },
+  ], tasks: [], login_methods: [
+    { id: 'oauth_cn', name: '国内版授权', description: '打开 CodeBuddy 授权页登录，完成后自动加入账号池' },
+    { id: 'import_json', name: '导入凭证', description: '导入本面板「导出配置」生成的文件，或单个凭证 JSON（auths/*.json 格式）、cockpit tools 导出的账号数组',
+      fields: [{ key: 'json', label: '凭证 JSON', kind: 'textarea' }] },
+  ] },
   '/api/task-runs/latest': { latest: {} },
 }
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff': 'font/woff', '.woff2': 'font/woff2' }
@@ -243,6 +247,33 @@ async function main() {
     await capture(cdp, sessionId, 'overview-dark', '/', 1440, 960, true)
     await capture(cdp, sessionId, 'accounts', '/accounts', 1440, 820, false,
       `Array.from(document.querySelectorAll('input[aria-label="选择"]')).slice(0,2).forEach(el => el.click())`)
+    // 导出对话框：默认全选，取消最后两个（冷却中、已暂停）以展示「可挑选」
+    await capture(cdp, sessionId, 'export-dialog', '/accounts', 1440, 820, false, `(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+      Array.from(document.querySelectorAll("button")).find((b) => b.textContent.includes("导出配置")).click()
+      await wait(250)
+      Array.from(document.querySelectorAll("[role=dialog] ul input[type=checkbox]")).slice(-2).forEach((b) => b.click())
+      await wait(150)
+    })()`)
+    // 导入对话框：选「导入凭证」并载入一个导出文件（虚构凭证，仅用于展示）
+    await capture(cdp, sessionId, 'import-dialog', '/accounts', 1440, 820, false, `(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+      Array.from(document.querySelectorAll("button")).find((b) => b.textContent.includes("添加账号")).click()
+      await wait(300)
+      Array.from(document.querySelectorAll("[role=dialog] button")).find((b) => b.textContent.includes("导入凭证")).click()
+      await wait(200)
+      const sample = ["sample01", "sample02", "sample03"].map((uid, i) => ({
+        auth: { accessToken: "example-access-token-" + (i + 1), refreshToken: "example-refresh-token-" + (i + 1), expiresAt: 1790000000 + i, domain: "copilot.tencent.com", realm: "cn" },
+        account: { uid, enterpriseId: "", nickname: ["日常编程", "长上下文", "工具调用"][i] },
+      }))
+      const file = new File([JSON.stringify(sample, null, 2)], "poolservice-workbuddy-accounts-20261016-100000.json", { type: "application/json" })
+      const dt = new DataTransfer()
+      dt.items.add(file)
+      const input = document.querySelector("[role=dialog] input[type=file]")
+      input.files = dt.files
+      input.dispatchEvent(new Event("change", { bubbles: true }))
+      await wait(300)
+    })()`)
     await capture(cdp, sessionId, 'credits', '/credits', 1440, 1770)
     await capture(cdp, sessionId, 'gateway', '/gateway', 1440, 1100)
     await capture(cdp, sessionId, 'usage', '/usage', 1440, 1220)

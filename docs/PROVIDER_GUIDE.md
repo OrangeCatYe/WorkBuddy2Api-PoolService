@@ -14,6 +14,7 @@ PoolService 用 Provider 适配器对接各类 AI 编程助手。不同平台的
 | `TaskCapable` | 否 | 任务页的任务卡片；账号页批量栏的「执行任务」菜单 |
 | `SettingsCapable` | 否 | 设置页的平台参数标签页 |
 | `QuestCapable` | 否 | 账号详情的「成长任务」页签（查看进度、自动完成、领奖） |
+| `AccountExporter` | 否 | 账号页的「导出配置」按钮与批量栏「导出」；导出文件可在「添加账号 → 导入凭证」原样导入 |
 | `TaskHistoryAware` | 否 | 注入执行记录器，任务页显示每次执行的逐账号结果 |
 | `RoutingTunable` | 否 | 积分中心的选号策略对该平台生效 |
 | `Starter` | 否 | 启动 / 停止后台协程（刷新、持久化） |
@@ -70,11 +71,21 @@ Provider 直接向 `w` 写出 OpenAI Chat Completions 格式（SSE 或 JSON）�
 
 面板只提交改过的字段。核心层按 schema 校验类型和范围（schema 外的 Key 一律拒绝），合并进配置段后交给 `ApplySettings`，成功才写回 `config.json`。
 
-## 7. 注册
+## 7. 账号导出
+
+实现 `AccountExporter` 后，账号页会出现「导出配置」（工具栏）和「导出」（多选批量栏），不需要写前端代码。
+
+- `ExportAccounts(ctx, ids)` 返回 `AccountExport{Data, Count, Missing}`。`Data` 是可直接保存成文件的 JSON，**必须能被同一平台的导入方式（`LoginCapable` 里的导入类 `LoginMethod`）原样接收**——这是导出与导入能回环的前提。最稳妥的做法是直接输出平台自己的凭证落盘形态。
+- 部分账号不存在或凭证不完整时记入 `Missing`，不要中断整批；全部无法导出才返回错误。
+- 内容含凭证明文：实现方不得把凭证写进日志（只记数量）。鉴权、`admin_key` 为空时拒绝、`no-store` 响应头由面板接口统一处理，实现方无需重复。
+- 不要导出可由上游重新拉取的运行态（余额、冷却等），否则导入会把过期数据当真。
+- 导入侧如果允许覆盖已存在的账号，建议像 WorkBuddy 那样「保留较新的凭证」：用旧导出覆盖较新的令牌，可能让刷新令牌失效。
+
+## 8. 注册
 
 在 `internal/app/app.go` 中解析 `providers.<id>` 配置段并 `reg.Register(...)`。注册顺序就是优先级：多个平台提供同名模型时，短名指向先注册的平台，其余平台的同名模型以 `平台/模型` 全名出现。
 
-## 8. 参考实现
+## 9. 参考实现
 
 - `internal/gateway/fakeprovider_test.go`：最小实现，只有 `Provider` + `ChatCapable`（网关测试用的替身，不编进程序）
 - `internal/providers/workbuddy`：完整实现，全部能力

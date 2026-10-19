@@ -46,7 +46,7 @@ func (p *Provider) LoginMethods() []provider.LoginMethod {
 	}
 	methods = append(methods, provider.LoginMethod{
 		ID: "import_json", Name: "导入凭证",
-		Description: "粘贴单个凭证 JSON（auths/*.json 格式）或 cockpit tools 导出的账号数组",
+		Description: "导入本面板「导出配置」生成的文件，或单个凭证 JSON（auths/*.json 格式）、cockpit tools 导出的账号数组",
 		Fields:      []provider.FieldDef{{Key: "json", Label: "凭证 JSON", Kind: "textarea"}},
 	})
 	return methods
@@ -267,12 +267,16 @@ func (p *Provider) importJSON(_ context.Context, raw []byte) (*provider.LoginSta
 	} else {
 		items = []json.RawMessage{raw}
 	}
-	var ok int
+	var ok, skipped int
 	var errs []string
 	for i, it := range items {
 		a, err := parseImported(it)
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("#%d %v", i+1, err))
+			continue
+		}
+		if shouldKeepExisting(p.pool.AuthByUID(a.UID), a) {
+			skipped++
 			continue
 		}
 		realm := a.Realm()
@@ -283,7 +287,10 @@ func (p *Provider) importJSON(_ context.Context, raw []byte) (*provider.LoginSta
 		ok++
 	}
 	st := &provider.LoginStatus{State: "success", Message: fmt.Sprintf("导入 %d / %d 个账号", ok, len(items))}
-	if ok == 0 {
+	if skipped > 0 {
+		st.Message = joinMsg(st.Message, fmt.Sprintf("跳过 %d 个（池中已有同一账号且凭证不旧于导入内容）", skipped))
+	}
+	if ok == 0 && skipped == 0 {
 		st.State = "failed"
 	}
 	if len(errs) > 0 {

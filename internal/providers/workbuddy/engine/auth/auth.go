@@ -303,18 +303,10 @@ func Parse(raw []byte) (*Auth, error) {
 	return &a, nil
 }
 
-// SaveAtomic 以嵌套形原子写回 FilePath（tmp + rename），保持嵌套形（插件可读）格式。
-// 全程持 a.mu：防止与 RefreshToken 修改 token 字段并发，杜绝写回半更新。
-// 防御：accessToken 为空时拒绝写回，避免误用空凭证覆盖有效文件。
-func (a *Auth) SaveAtomic() error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if strings.TrimSpace(a.AccessToken) == "" {
-		return fmt.Errorf("save refused: empty accessToken (uid=%s)", a.UID)
-	}
-	if a.FilePath == "" {
-		return fmt.Errorf("no FilePath set")
-	}
+// docLocked 凭证的磁盘形态（嵌套形，插件可读）。调用方须持 a.mu。
+// SaveAtomic 与 Export 共用它，保证导出的内容与落盘文件逐字段一致，
+// 导出结果因此可被 Parse / 导入原样接收。
+func (a *Auth) docLocked() map[string]any {
 	doc := map[string]any{
 		"auth": map[string]any{
 			"accessToken":  a.AccessToken,
@@ -334,6 +326,33 @@ func (a *Auth) SaveAtomic() error {
 	if a.DeviceToken != "" {
 		doc["device_token"] = a.DeviceToken
 	}
+	return doc
+}
+
+// Export 返回凭证的嵌套形文档（与 auths/*.json 落盘内容一致，不含 FilePath）。
+// 含令牌明文，调用方负责鉴权与不落日志。凭证不完整（无 accessToken）时报错。
+func (a *Auth) Export() (map[string]any, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if strings.TrimSpace(a.AccessToken) == "" {
+		return nil, fmt.Errorf("凭证不完整: 缺少 accessToken")
+	}
+	return a.docLocked(), nil
+}
+
+// SaveAtomic 以嵌套形原子写回 FilePath（tmp + rename），保持嵌套形（插件可读）格式。
+// 全程持 a.mu：防止与 RefreshToken 修改 token 字段并发，杜绝写回半更新。
+// 防御：accessToken 为空时拒绝写回，避免误用空凭证覆盖有效文件。
+func (a *Auth) SaveAtomic() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if strings.TrimSpace(a.AccessToken) == "" {
+		return fmt.Errorf("save refused: empty accessToken (uid=%s)", a.UID)
+	}
+	if a.FilePath == "" {
+		return fmt.Errorf("no FilePath set")
+	}
+	doc := a.docLocked()
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return err

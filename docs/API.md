@@ -88,5 +88,25 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 | `POST /api/providers/{pid}/accounts/{aid}/quests/{code}/claim` | 领取奖励 |
 | `POST /api/providers/{pid}/accounts/{aid}/quests/accept` | 接受全部未接受的任务 |
 | `PUT /api/providers/{pid}/settings` | 修改参数，只提交改动项：`{"values": {"pool.max_in_flight": 4}}`；校验失败返回 400 且不改动任何状态 |
+| `POST /api/providers/{pid}/export` | 导出所选账号的配置。请求体 `{"account_ids": [...]}`；返回 `{"count", "missing", "accounts"}`，其中 `accounts` 即可保存为文件、并在「添加账号 → 导入凭证」中原样导入的内容。**含登录令牌明文**，详见下节 |
+
+### 导出账号配置
+
+`accounts` 是凭证数组，每项与 `auths/*.json` 的落盘形态一致：
+
+```json
+[
+  {
+    "auth": { "accessToken": "…", "refreshToken": "…", "expiresAt": 1790000000, "domain": "copilot.tencent.com", "realm": "cn" },
+    "account": { "uid": "…", "enterpriseId": "", "nickname": "…" }
+  }
+]
+```
+
+- 只导出请求里列出的账号，顺序与请求一致；重复的 ID 会合并。不存在或凭证不完整的 ID 不会中断整批，而是列在 `missing` 里。所选账号全部无法导出时返回 400。
+- 不含余额、冷却、统计等运行态；导入后会重新拉取。整体迁移旧版运行态用 `cmd/migrate`。
+- 导入同一 UID 时，如果池中现有凭证的过期时间不早于导入内容，该账号会被跳过（避免旧导出覆盖已轮换的刷新令牌）；导入内容更新时照常覆盖。
+- **安全**：响应带 `Cache-Control: no-store`；仅支持 POST，令牌不会出现在 URL 中；`admin_key` 为空时返回 403 拒绝导出；服务端日志只记录数量，不记录任何令牌。导出文件等同账号密码，请妥善保管。
+- 平台需要实现 `AccountExporter` 才有此接口，否则返回 400。当前 WorkBuddy 已支持。
 
 积分相关接口见 [CREDITS.md](CREDITS.md)。

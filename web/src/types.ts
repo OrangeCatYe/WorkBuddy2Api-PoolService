@@ -88,6 +88,13 @@ export interface ActionResult {
   message?: string
 }
 
+/** POST /api/providers/{pid}/export 的响应；accounts 即可直接保存、可被导入的文件内容。 */
+export interface ExportResult {
+  count: number
+  missing?: string[]
+  accounts: unknown[]
+}
+
 export interface TaskDef {
   id: string
   name: string

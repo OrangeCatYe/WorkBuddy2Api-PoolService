@@ -99,6 +99,14 @@
 - F5.2 测试：保留原项目单测；核心层新增单测；前端类型检查 + 构建通过
 - F5.3 git：`main` 为稳定分支，每阶段 `feat/*` 分支开发、合并；Conventional Commits 中文描述
 
+### 3.6 账号配置导出与导入（F6，v1.0 之后）
+提案见 [proposals/2026-10-19-account-export.md](proposals/2026-10-19-account-export.md)。
+- F6.1 账号页可勾选任意账号导出为 JSON 文件（工具栏「导出配置」或多选后批量栏「导出」），文件即凭证数组，与 `auths/*.json` 同形态
+- F6.2 导出文件通过「添加账号 → 导入凭证」原样导入，导入表单支持从文件载入；不新增文件格式，旧版本也能导入
+- F6.3 同一 UID 且池中凭证不旧于导入内容时跳过，避免旧导出覆盖已轮换的刷新令牌（与 `cmd/migrate` 规则一致）
+- F6.4 安全：仅 POST、`no-store`、`admin_key` 为空时拒绝、日志不记令牌；导出文件含令牌明文，不加密（加密会破坏与 `auths/*.json` 的同形态兼容）
+- F6.5 能力驱动：平台实现 `provider.AccountExporter` 才显示入口，当前仅 WorkBuddy；不导出余额、冷却等运行态
+
 ## 4. ttswitch 对接契约
 
 依据 `tt-switch-master/client/src-tauri/src/services/model_fetch.rs`、`proxy/usage/parser.rs`、`doc/TENCENT_REASONING_EFFORT_STRATEGY.md`。

@@ -65,7 +65,7 @@ PoolService 是一个**运行在本机的账号池网关与 Web 管理面板**�
     <td><a href="docs/images/gateway.png"><img src="docs/images/gateway.png" alt="接入与密钥：客户端配置向导、独立密钥、RPM 与积分预算" width="100%"></a></td>
   </tr>
   <tr>
-    <td>按状态筛选、按余额或到期时间排序，批量刷新、签到、暂停与恢复；点击账号查看详情。</td>
+    <td>按状态筛选、按余额或到期时间排序，批量刷新、签到、暂停、恢复与导出；点击账号查看详情。</td>
     <td>复制 ttswitch、Claude Code、Codex CLI 配置；按密钥限制模型、速率和积分预算。</td>
   </tr>
 </table>
@@ -87,6 +87,27 @@ PoolService 是一个**运行在本机的账号池网关与 Web 管理面板**�
   </tr>
 </table>
 
+### 换机、重装或备份：导出配置，再导入
+
+在账号页点击「导出配置」，勾选需要的账号，即可保存为一个 JSON 文件；也可以先在列表里多选，再点底部的「导出」。到另一台实例的「添加账号 → 导入凭证」中点「从文件载入」，提交后账号立即加入账号池。
+
+<table>
+  <tr>
+    <th width="50%">导出配置</th>
+    <th width="50%">导入配置</th>
+  </tr>
+  <tr>
+    <td><a href="docs/images/export-dialog.png"><img src="docs/images/export-dialog.png" alt="导出账号配置：风险提示、账号勾选列表和导出数量" width="100%"></a></td>
+    <td><a href="docs/images/import-dialog.png"><img src="docs/images/import-dialog.png" alt="导入凭证：从文件载入并显示已载入的账号数" width="100%"></a></td>
+  </tr>
+  <tr>
+    <td>可逐个勾选、搜索、全选或清空；按钮实时显示将导出几个账号。</td>
+    <td>载入后显示文件名与账号数；池中已有更新的同一账号会自动跳过，不会被旧文件覆盖。</td>
+  </tr>
+</table>
+
+> 导出文件**包含登录令牌明文，等同于账号密码**，请只保存在可信位置，不要发给他人或上传到公开仓库。为此，`admin_key` 为空时面板会拒绝导出。文件格式与 `auths/*.json` 一致，没有额外的私有格式。
+
 <details>
 <summary>查看深色主题与移动端界面</summary>
 
@@ -101,6 +122,7 @@ PoolService 是一个**运行在本机的账号池网关与 Web 管理面板**�
 - **多平台框架**：平台以适配器接入，登录方式、账号操作、定时任务由适配器声明，面板自动渲染。当前支持 WorkBuddy（国内版 / 国际版）。
 - **多协议网关**：OpenAI Chat Completions、Anthropic Messages、OpenAI Responses 三种入口，ttswitch、Claude Code、Codex CLI 都能直接接入；模型能力字段与 ttswitch 对齐，思考强度五档自动映射。
 - **下游密钥**：按密钥限制模型、RPM 与每日 / 累计积分，独立统计用量。
+- **账号导出与导入**：勾选账号导出为 JSON 文件，在「添加账号 → 导入凭证」载入即可恢复，方便换机、重装和备份；文件与 `auths/*.json` 同形态。导出内容含令牌明文，请妥善保管。
 - **请求日志与用量分析**：每个请求的账号、token、缓存命中、积分、耗时一目了然（不记录对话内容）。
 - **积分中心**：预测每批积分到期前能否用完，按到期压力把收费请求优先分给快过期的账号，每次选号都能回放原因。详见 [docs/CREDITS.md](docs/CREDITS.md)。
 - **积分显示精度**：完整显示积分，默认到个位；设置中可切换两位小数，全站即时联动。
@@ -143,7 +165,7 @@ cp config.example.json config.json
 
 1. 从 [Release](https://github.com/OrangeCatYe/WorkBuddy2Api-PoolService/releases/latest) 下载并启动对应平台程序。
 2. 打开面板 `http://127.0.0.1:7863`，输入启动日志中的面板管理密钥。
-3. 在「账号 → 添加账号」选择「国内版授权」，在弹出的页面完成登录。
+3. 在「账号 → 添加账号」选择「国内版授权」，在弹出的页面完成登录。已有其他实例导出的文件时，改选「导入凭证」→「从文件载入」即可。
 4. 在「接入与密钥」创建 API Key，复制所用客户端的配置即可接入。
 
 也可以自行构建：

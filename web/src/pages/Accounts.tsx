@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { ArrowDownUp, CalendarClock, ChevronUp, Loader2, Plus, Search, Users, X } from 'lucide-react'
+import { ArrowDownUp, CalendarClock, ChevronUp, Download, Loader2, Plus, Search, Users, X } from 'lucide-react'
 import { post } from '@/lib/api'
 import { useAccounts, useMeta, useProviderDetail } from '@/lib/queries'
 import { fmtNum, fmtRelative, pct } from '@/lib/format'
 import { useToast } from '@/components/overlay'
 import { Badge, Button, Card, Empty, Meter, Skeleton, StatusBadge, cx } from '@/components/ui'
 import { AddAccountDialog } from '@/components/AddAccountDialog'
+import { ExportAccountsDialog } from '@/components/ExportAccountsDialog'
 import { AccountDrawer, ConfirmAction } from '@/components/AccountDrawer'
 import { useAccountActions } from '@/components/useAccountActions'
 import type { Account, AccountStatus } from '@/types'
@@ -127,7 +128,7 @@ function BulkActions({ provider, ids, onDone }: { provider: string; ids: string[
   )
 }
 
-function BulkBar({ rows, onKeep, onClear }: { rows: Account[]; onKeep: (provider: string) => void; onClear: () => void }) {
+function BulkBar({ rows, onKeep, onClear, onExport }: { rows: Account[]; onKeep: (provider: string) => void; onClear: () => void; onExport: () => void }) {
   const { data: meta } = useMeta()
   const byProvider = useMemo(() => {
     const m = new Map<string, string[]>()
@@ -135,6 +136,7 @@ function BulkBar({ rows, onKeep, onClear }: { rows: Account[]; onKeep: (provider
     return [...m.entries()]
   }, [rows])
   const nameOf = (id: string) => meta?.providers.find((p) => p.id === id)?.name ?? id
+  const canExport = byProvider.length === 1 && !!meta?.providers.find((p) => p.id === byProvider[0][0])?.capabilities.includes('export')
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex justify-center px-4 lg:pl-[232px]">
       <div className="pointer-events-auto flex max-w-full animate-rise flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border border-ink/80 bg-ink px-4 py-2 text-bg shadow-pop">
@@ -145,6 +147,11 @@ function BulkBar({ rows, onKeep, onClear }: { rows: Account[]; onKeep: (provider
         {byProvider.length === 1 ? (
           <div className="flex flex-wrap items-center gap-0.5">
             <BulkActions provider={byProvider[0][0]} ids={byProvider[0][1]} onDone={onClear} />
+            {canExport && (
+              <button onClick={onExport} className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12.5px] hover:bg-bg/10">
+                <Download size={13} /> 导出
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
@@ -225,9 +232,11 @@ export function AccountsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  const [exporting, setExporting] = useState<{ open: boolean; keys: string[] }>({ open: false, keys: [] })
   const lastIdx = useRef<number | null>(null)
   const { data: meta } = useMeta()
   const { data: accounts, isLoading } = useAccounts(provider || undefined)
+  const canExport = !!meta?.providers.some((p) => p.capabilities.includes('export')) && !!accounts?.length
 
   const setParam = (k: string, v: string) =>
     setParams(
@@ -348,6 +357,11 @@ export function AccountsPage() {
               ))}
             </select>
           </label>
+          {canExport && (
+            <Button icon={<Download size={15} />} onClick={() => setExporting({ open: true, keys: [] })}>
+              导出配置
+            </Button>
+          )}
           <Button variant="primary" icon={<Plus size={15} />} onClick={() => setAdding(true)}>
             添加账号
           </Button>
@@ -510,6 +524,7 @@ export function AccountsPage() {
         <BulkBar
           rows={selectedRows}
           onKeep={(pid) => setSelected(new Set(selectedRows.filter((a) => a.provider === pid).map(keyOf)))}
+          onExport={() => setExporting({ open: true, keys: selectedRows.map(keyOf) })}
           onClear={() => {
             setSelected(new Set())
             lastIdx.current = null
@@ -518,6 +533,7 @@ export function AccountsPage() {
       )}
       <AccountDrawer account={open} onClose={() => setOpenKey(null)} />
       <AddAccountDialog open={adding} onClose={() => setAdding(false)} defaultProvider={provider || undefined} />
+      <ExportAccountsDialog open={exporting.open} onClose={() => setExporting((s) => ({ ...s, open: false }))} accounts={accounts ?? []} preselected={exporting.keys} />
     </div>
   )
 }

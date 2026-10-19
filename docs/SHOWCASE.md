@@ -11,7 +11,8 @@ README 采用「产品封面 → 软件定位 → 界面导览 → 下载与使�
 | `cover.png` | 产品封面，真实深色概览与移动端账号界面组合 |
 | `flow.svg` | WorkBuddy 账号、PoolService 与编程客户端的接入关系 |
 | `overview-light.png` / `overview-dark.png` | 明暗主题概览 |
-| `accounts.png` | 账号筛选、额度与批量操作 |
+| `accounts.png` | 账号筛选、额度与批量操作（含「导出配置」入口） |
+| `export-dialog.png` / `import-dialog.png` | 导出账号配置对话框、导入凭证并从文件载入（凭证为虚构占位值） |
 | `credits.png` | 到期日历、消耗预测、选号策略与回放 |
 | `gateway.png` | 客户端配置与独立密钥预算 |
 | `usage.png` | 用量趋势与模型、账号、密钥、协议拆分 |

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, FileJson, Globe2, Loader2, ShieldCheck } from 'lucide-react'
+import { ExternalLink, FileJson, Globe2, Loader2, ShieldCheck, Upload } from 'lucide-react'
 import { api, post } from '@/lib/api'
 import { useProviderDetails } from '@/lib/queries'
 import type { LoginMethod, LoginSession, LoginStatus } from '@/types'
@@ -12,6 +12,19 @@ type Phase = { kind: 'idle' } | { kind: 'starting' } | { kind: 'waiting'; sessio
 const methodIcon = (id: string) =>
   id.startsWith('import') ? <FileJson size={16} /> : id.includes('global') ? <Globe2 size={16} /> : <ShieldCheck size={16} />
 
+/** 后端请求体上限 4 MB，超过的文件直接在前端拦下。 */
+const MAX_IMPORT_BYTES = 4 << 20
+
+/** 统计文本里有几个账号：数组按元素数，单个对象算 1 个；不是有效 JSON 返回 null。 */
+function countAccounts(text: string): number | null {
+  try {
+    const v = JSON.parse(text)
+    return Array.isArray(v) ? v.length : v && typeof v === 'object' ? 1 : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * 添加账号：平台与登录方式完全由后端能力声明驱动。
  * OAuth 类返回 auth_url → 新窗口打开并每 3 秒轮询；表单类同步返回结果。
@@ -21,8 +34,10 @@ export function AddAccountDialog({ open, onClose, defaultProvider }: { open: boo
   const [pid, setPid] = useState('')
   const [method, setMethod] = useState<LoginMethod | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
+  const [loaded, setLoaded] = useState<{ name: string; count: number | null } | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   const timer = useRef<number>()
+  const fileRef = useRef<HTMLInputElement>(null)
   const qc = useQueryClient()
   const toast = useToast()
 
@@ -33,13 +48,30 @@ export function AddAccountDialog({ open, onClose, defaultProvider }: { open: boo
     setPid(defaultProvider && details.some((d) => d.meta.id === defaultProvider) ? defaultProvider : (details[0]?.meta.id ?? ''))
     setPhase({ kind: 'idle' })
     setFields({})
+    setLoaded(null)
   }, [open])
 
   useEffect(() => {
     setMethod(current?.login_methods?.[0] ?? null)
+    setLoaded(null)
   }, [current?.meta.id])
 
   useEffect(() => () => window.clearInterval(timer.current), [])
+
+  /** 读取本地文件填入文本域（如「导出配置」生成的文件）。 */
+  async function loadFile(key: string, file: File) {
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast.bad('文件超过 4 MB，无法导入')
+      return
+    }
+    try {
+      const text = await file.text()
+      setFields((s) => ({ ...s, [key]: text }))
+      setLoaded({ name: file.name, count: countAccounts(text) })
+    } catch (e) {
+      toast.bad(`读取文件失败：${(e as Error).message}`)
+    }
+  }
 
   function finish(st: LoginStatus) {
     window.clearInterval(timer.current)
@@ -157,27 +189,59 @@ export function AddAccountDialog({ open, onClose, defaultProvider }: { open: boo
             </div>
           </div>
 
-          {method?.fields?.map((f) => (
-            <label key={f.key} className="block">
-              <span className="eyebrow mb-1.5 block">{f.label}</span>
-              {f.kind === 'textarea' ? (
+          {method?.fields?.map((f) =>
+            f.kind === 'textarea' ? (
+              <div key={f.key}>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="eyebrow">{f.label}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => fileRef.current?.click()}
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-muted hover:text-accent disabled:opacity-50"
+                  >
+                    <Upload size={12} /> 从文件载入
+                  </button>
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = '' // 允许连续选择同一个文件
+                      if (file) void loadFile(f.key, file)
+                    }}
+                  />
+                </div>
                 <textarea
                   value={fields[f.key] ?? ''}
-                  onChange={(e) => setFields((s) => ({ ...s, [f.key]: e.target.value }))}
+                  onChange={(e) => {
+                    setLoaded(null)
+                    setFields((s) => ({ ...s, [f.key]: e.target.value }))
+                  }}
                   rows={7}
                   spellCheck={false}
                   className="num w-full resize-y rounded-lg border border-line bg-bg px-3 py-2 text-[12px] outline-none focus:border-accent"
-                  placeholder='{"auth":{...},"account":{...}}'
+                  placeholder={'粘贴凭证 JSON，或点右上角「从文件载入」选择导出的文件\n[{"auth":{...},"account":{...}}, ...]'}
                 />
-              ) : (
+                {loaded && (
+                  <p className={cx('mt-1.5 text-[12px]', loaded.count === null ? 'text-bad' : 'text-muted')}>
+                    {loaded.count === null ? `已载入 ${loaded.name}，但内容不是有效的 JSON` : `已载入 ${loaded.name}，含 ${loaded.count} 个账号`}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <label key={f.key} className="block">
+                <span className="eyebrow mb-1.5 block">{f.label}</span>
                 <input
                   value={fields[f.key] ?? ''}
                   onChange={(e) => setFields((s) => ({ ...s, [f.key]: e.target.value }))}
                   className="h-9 w-full rounded-lg border border-line bg-bg px-3 text-[13px] outline-none focus:border-accent"
                 />
-              )}
-            </label>
-          ))}
+              </label>
+            ),
+          )}
 
           {phase.kind === 'waiting' && (
             <div className="rounded-xl border border-line bg-sunken/60 px-4 py-3 text-[13px]">

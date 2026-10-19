@@ -6,6 +6,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -22,6 +23,7 @@ const (
 	CapAccountOps Capability = "account_ops" // 账号运维动作
 	CapTasks      Capability = "tasks"       // 定时任务 / 成长任务
 	CapSettings   Capability = "settings"    // 面板可修改平台参数
+	CapExport     Capability = "export"      // 账号配置导出
 )
 
 // Meta Provider 元信息。
@@ -211,6 +213,26 @@ type AccountOps interface {
 	Do(ctx context.Context, accountID, action string, params map[string]string) (*ActionResult, error)
 }
 
+// ---- 账号导出 ----
+
+// AccountExport 账号配置导出结果。
+type AccountExport struct {
+	// Data 可直接保存为文件的 JSON，必须能被同一平台的导入方式（LoginCapable 里的
+	// import 类方法）原样接收。
+	Data json.RawMessage `json:"accounts"`
+	// Count 实际导出的账号数。
+	Count int `json:"count"`
+	// Missing 请求了但没有导出的账号 ID（不存在或凭证不完整）。
+	Missing []string `json:"missing,omitempty"`
+}
+
+// AccountExporter 账号配置导出能力。导出内容含登录凭证明文，调用方负责鉴权，
+// 实现方不得把凭证写进日志。
+type AccountExporter interface {
+	// ExportAccounts 导出指定账号。无一可导出时返回错误；部分缺失记入 Missing。
+	ExportAccounts(ctx context.Context, accountIDs []string) (*AccountExport, error)
+}
+
 // ---- 任务 ----
 
 // TaskDef 定时 / 手动任务描述。
@@ -280,6 +302,7 @@ func MetaWithCaps(p Provider) Meta {
 	_, tasks := p.(TaskCapable)
 	_, settings := p.(SettingsCapable)
 	_, quests := p.(QuestCapable)
+	_, export := p.(AccountExporter)
 	add(CapChat, chat)
 	add(CapQuota, quota)
 	add(CapLogin, login)
@@ -287,5 +310,6 @@ func MetaWithCaps(p Provider) Meta {
 	add(CapTasks, tasks)
 	add(CapSettings, settings)
 	add(CapQuests, quests)
+	add(CapExport, export)
 	return m
 }
