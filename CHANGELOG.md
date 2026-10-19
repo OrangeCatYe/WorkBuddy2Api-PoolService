@@ -2,7 +2,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [未发布]
+## [1.1.0] - 2026-10-19
 
 ### 新增
 - 账号配置导出：账号页工具栏「导出配置」或多选后批量栏「导出」，可逐个勾选账号（支持搜索、全选、清空）并保存为 JSON 文件；导出文件与 `auths/*.json` 同形态，可在「添加账号 → 导入凭证」原样导入，旧版本也能读取。新增 `POST /api/providers/{pid}/export` 与可选能力 `provider.AccountExporter`（见 `docs/proposals/2026-10-19-account-export.md`）
