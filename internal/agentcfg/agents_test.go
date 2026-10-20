@@ -158,6 +158,9 @@ func TestModelsJSONMergeConflictUpdateRemove(t *testing.T) {
 	if ent["vendor"] != vendorMark || ent["url"] != "http://127.0.0.1:7863/v1/chat/completions" || ent["apiKey"] != testKey {
 		t.Fatalf("条目内容不符：%v", ent)
 	}
+	if ent["name"] != ent["id"] {
+		t.Fatalf("name 必须与 id 一致，否则 WorkBuddy 会显示成「name:id」：%v", ent)
+	}
 	if ent["maxInputTokens"].(float64) != 200000 || ent["supportsReasoning"] != true {
 		t.Fatalf("能力字段不符：%v", ent)
 	}

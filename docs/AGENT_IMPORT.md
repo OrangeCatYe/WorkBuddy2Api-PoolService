@@ -67,6 +67,8 @@ Windows 下 `~` 是用户目录；Claude Desktop 的数据目录是 `%LOCALAPPDA
 
 **WorkBuddy 提示地址不对。** 官方文档要求 `url` 写完整的 `/chat/completions` 路径，社区教程有不同说法。如果你的版本不接受，请在应用里改一次并反馈。
 
+**WorkBuddy / CodeBuddy 的模型名显示成「名称:ID」。** WorkBuddy 的模型选择器对自定义模型，在 `name` 与 `id` 不一致时会显示 `name:id`。网关的展示名和 ID 带着同样的倍率后缀，拼起来就重复一遍，所以导入时把 `name` 写成与 `id` 完全一致，界面只显示一次 ID。代价是看不到带大小写的美化名称。已导入过的在卡片上点「更新」即可。
+
 **WorkBuddy / CodeBuddy 里没有思考强度选择。** 支持思考的模型会写入 `reasoning.supportedEfforts`（目录声明的全部档位）和 `reasoning.defaultEffort`（目录声明的默认档，没有声明时取 high、medium，再不行取最后一档）。目录没有给出档位的模型只写 `supportsReasoning`，不会凭空编造档位。已导入过的用户在卡片上点「更新」即可补上。
 
 **OMP 提示发现旧版配置。** 只有旧版 `models.json` 而没有 `models.yml` 时，需要先启动一次 OMP 让它自己迁移，再回来导入。

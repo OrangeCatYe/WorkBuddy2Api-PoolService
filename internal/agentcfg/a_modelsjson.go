@@ -68,9 +68,12 @@ func scanEntries(ed *jsonEditor, path []string) []jsonEntry {
 }
 
 func (a modelsJSON) entry(in Input, m Model) Obj {
+	// name 必须与 id 完全一致：WorkBuddy 的模型选择器对自定义模型在 name 与 id 不同时会显示
+	// 「name:id」，而网关给的展示名和 id 带着同样的倍率后缀，拼起来就重复了一遍。
+	// 一致时只显示一次 id。
 	o := Obj{
 		{"id", m.ID},
-		{"name", displayName(m)},
+		{"name", m.ID},
 		{"vendor", vendorMark},
 		{"url", in.OpenAIBase() + "/chat/completions"},
 		{"apiKey", in.APIKey},
