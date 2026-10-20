@@ -4,6 +4,20 @@
 
 ## [未发布]
 
+## [1.3.0] - 2026-10-20
+
+### 新增
+- 快速导入到其他 Agent：左侧「网关」组新增「快速导入」，选好密钥和模型后一键写进 WorkBuddy、CodeBuddy、Claude Code、Claude Desktop、Codex CLI、OpenCode、Pi Agent、OMP、DeepSeek Harness 的配置，写入前可预览，写入前自动备份，支持移除并还原。只认配置目录，不管软件装在哪：目录按「手动指定 > 环境变量（`CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`OPENCODE_CONFIG`、`PI_CODING_AGENT_DIR`、`PI_CONFIG_DIR`、`OMP_PROFILE`、`DSH_HOME` 等）> 默认位置」解析，找不到时可在界面手动指定目录
+- 只改本工具写入的部分：用户原有的供应商、模型、注释与排版原样保留，同名但不是本工具写入的条目一律跳过；会改变「当前使用的接口」的键（Claude Code 的 `ANTHROPIC_*`、Claude Desktop 的启用档案、Codex / OpenCode / DeepSeek Harness 的默认模型）先记录原值，移除时还原
+- 密钥由用户选择；只有一把密钥都没有时才在写入时自动创建一把不限模型、不限额的「默认密钥（全部模型）」；所选密钥有模型白名单时，只能导入白名单内的模型
+- 新增接口 `GET /api/agents`、`POST /api/agents/{id}/detect|preview|render|apply|remove`，详见 `docs/API.md` 与 `docs/AGENT_IMPORT.md`
+- 新增依赖 `gopkg.in/yaml.v3` 与 `github.com/pelletier/go-toml/v2`（纯 Go）
+
+### 说明
+- 写入和移除只在本机可用：要求已设置 `admin_key`、请求来自本机回环地址且不带转发头、浏览器请求同源。面板部署在远程服务器时只开放预览与「显示完整配置」，由用户手动粘贴
+- Claude Desktop 的模型菜单只接受 `claude-<家族>-…` 命名的模型，其余模型会被跳过并说明原因
+- 本机没有安装 OMP、Pi，Linux / macOS 路径仅靠单元测试覆盖；WorkBuddy 与 CodeBuddy 的 `url` 写法按官方文档写完整的 `/chat/completions` 路径，首次使用请在应用里确认一次
+
 ## [1.2.1] - 2026-10-20
 
 ### 变更
