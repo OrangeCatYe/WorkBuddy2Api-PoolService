@@ -139,6 +139,9 @@ func newEnv(t *testing.T, rel *release, version string) *env {
 	}}
 	e.cfg = cfg
 	e.svc = New(func() *config.Config { return e.cfg }, version)
+	// New 会读 INVOCATION_ID 判断是否被 systemd 托管。GitHub Actions 的 Linux runner 自身就由
+	// systemd 管理，环境里带着这个变量，不固定的话测试会随运行环境走进另一条分支。
+	e.svc.supervised = false
 	e.svc.keys = []ed25519.PublicKey{rel.pub}
 	e.svc.exePath = func() (string, error) { return e.exe, nil }
 	e.svc.verifyExe = func(string, string) error { e.verifyCalled.Add(1); return nil }
@@ -413,6 +416,41 @@ func TestApplyFailsCleanlyWhenUpdaterCannotStart(t *testing.T) {
 	}
 }
 
+// 被服务管理器托管（systemd 等）时：主进程自己原地替换文件，不拉起更新程序，替换完请求退出，
+// 由服务管理器重启。这条分支此前只有 ApplyInPlace 的单测，没有经过 Service.Apply 的覆盖。
+func TestApplySupervisedReplacesInPlaceAndRequestsExit(t *testing.T) {
+	e := readyEnv(t, fakeFiles(), "v1.0.0")
+	e.svc.supervised = true
+	writeFile(t, e.exe, "OLD-EXE")
+	writeFile(t, filepath.Join(e.inst, "README.md"), "old readme")
+
+	if cur := e.svc.Status().Current; cur.Mode != "supervised" {
+		t.Fatalf("托管模式应在状态里体现: %+v", cur)
+	}
+	if err := e.svc.Apply(); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got := readFile(t, e.exe); got != "NEW-EXE" {
+		t.Errorf("主程序应已原地替换: %q", got)
+	}
+	if got := readFile(t, filepath.Join(e.inst, "README.md")); got != "new readme" {
+		t.Errorf("README 应已替换: %q", got)
+	}
+	if exists(filepath.Join(e.svc.dir(), planFile)) || exists(filepath.Join(e.svc.dir(), aliveFile)) {
+		t.Error("托管模式不拉起更新程序，不应留下计划与报到标记")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for e.shutdown.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if e.shutdown.Load() != 1 {
+		t.Errorf("替换完应请求一次退出，交给服务管理器重启: %d", e.shutdown.Load())
+	}
+	res := e.svc.Status().LastResult
+	if res == nil || !res.OK || res.From != "v1.0.0" || res.To != "v1.0.1" {
+		t.Errorf("应写入成功结果供重启后回显: %+v", res)
+	}
+}
 func TestApplyRefusesWhenDirNotWritable(t *testing.T) {
 	e := readyEnv(t, fakeFiles(), "v1.0.0")
 	e.svc.exePath = func() (string, error) { return filepath.Join(e.inst, "no-such-dir", "poolsvc"), nil }
