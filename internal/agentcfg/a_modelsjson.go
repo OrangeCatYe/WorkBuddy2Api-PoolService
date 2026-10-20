@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 )
 
 // 受管标记：models.json 的条目没有「供应商」概念，用 vendor 字段标记归属。
@@ -83,8 +84,42 @@ func (a modelsJSON) entry(in Input, m Model) Obj {
 	o = append(o, KV{"supportsToolCall", m.Tools}, KV{"supportsImages", m.Vision})
 	if m.Reasoning {
 		o = append(o, KV{"supportsReasoning", true})
+		if r := modelsJSONReasoning(m); r != nil {
+			o = append(o, KV{"reasoning", r})
+		}
 	}
 	return o
+}
+
+// modelsJSONReasoning 生成 models.json 的 reasoning 对象，声明可选的思考强度与默认档，
+// 否则 WorkBuddy / CodeBuddy 界面不会出现强度选择器。目录没有给出档位时返回 nil，不凭空编造。
+func modelsJSONReasoning(m Model) Obj {
+	var levels []string
+	seen := map[string]bool{}
+	for _, e := range m.Efforts {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e != "" && !seen[e] {
+			seen[e] = true
+			levels = append(levels, e)
+		}
+	}
+	if len(levels) == 0 {
+		return nil
+	}
+	def := strings.ToLower(strings.TrimSpace(m.DefaultEffort))
+	if !seen[def] {
+		def = ""
+		for _, c := range []string{"high", "medium"} {
+			if seen[c] {
+				def = c
+				break
+			}
+		}
+		if def == "" {
+			def = levels[len(levels)-1]
+		}
+	}
+	return Obj{{"defaultEffort", def}, {"supportedEfforts", levels}}
 }
 
 func (a modelsJSON) Detect(env Env, opt Options, _ Prev) Info {

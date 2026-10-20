@@ -161,6 +161,13 @@ func TestModelsJSONMergeConflictUpdateRemove(t *testing.T) {
 	if ent["maxInputTokens"].(float64) != 200000 || ent["supportsReasoning"] != true {
 		t.Fatalf("能力字段不符：%v", ent)
 	}
+	rs, ok := ent["reasoning"].(map[string]any)
+	if !ok || rs["defaultEffort"] != "high" || !reflect.DeepEqual(rs["supportedEfforts"], []any{"low", "medium", "high"}) {
+		t.Fatalf("思考强度声明不符：%v", ent["reasoning"])
+	}
+	if _, has := m["models"].([]any)[3].(map[string]any)["reasoning"]; has {
+		t.Fatal("不支持思考的模型不应写 reasoning")
+	}
 
 	if info := h.detect(Options{}); !info.Imported || len(info.ImportedModels) != 2 {
 		t.Fatalf("Detect = %+v", info)
@@ -1076,5 +1083,32 @@ func TestMaskSecret(t *testing.T) {
 	}
 	if MaskSecret("short") != "•••••" {
 		t.Fatal("短密钥应全部遮掩")
+	}
+}
+
+func TestModelsJSONReasoning(t *testing.T) {
+	cases := []struct {
+		name string
+		m    Model
+		want Obj
+	}{
+		{"目录给了默认档", Model{Efforts: []string{"low", "high", "max"}, DefaultEffort: "max"},
+			Obj{{"defaultEffort", "max"}, {"supportedEfforts", []string{"low", "high", "max"}}}},
+		{"无默认档取 high", Model{Efforts: []string{"low", "medium", "high"}},
+			Obj{{"defaultEffort", "high"}, {"supportedEfforts", []string{"low", "medium", "high"}}}},
+		{"无 high 取 medium", Model{Efforts: []string{"low", "medium"}},
+			Obj{{"defaultEffort", "medium"}, {"supportedEfforts", []string{"low", "medium"}}}},
+		{"默认档不在档位内则回退", Model{Efforts: []string{"low", "high"}, DefaultEffort: "max"},
+			Obj{{"defaultEffort", "high"}, {"supportedEfforts", []string{"low", "high"}}}},
+		{"只有一档", Model{Efforts: []string{"minimal"}},
+			Obj{{"defaultEffort", "minimal"}, {"supportedEfforts", []string{"minimal"}}}},
+		{"大小写与重复归一", Model{Efforts: []string{" High", "high", "LOW"}},
+			Obj{{"defaultEffort", "high"}, {"supportedEfforts", []string{"high", "low"}}}},
+		{"目录没有档位", Model{Reasoning: true}, nil},
+	}
+	for _, c := range cases {
+		if got := modelsJSONReasoning(c.m); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s：got %v want %v", c.name, got, c.want)
+		}
 	}
 }

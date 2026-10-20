@@ -23,7 +23,7 @@ type fakeChat struct{ plainProvider }
 
 func (fakeChat) Models(context.Context) ([]provider.Model, error) {
 	return []provider.Model{
-		{ID: "glm-5.2", DisplayName: "GLM 5.2", ContextWindow: 200000, MaxOutputTokens: 32000, SupportsTools: true, SupportsThinking: true, ReasoningLevels: []string{"low", "high"}, CreditRate: 1},
+		{ID: "glm-5.2", DisplayName: "GLM 5.2", ContextWindow: 200000, MaxOutputTokens: 32000, SupportsTools: true, SupportsThinking: true, ReasoningLevels: []string{"low", "high"}, DefaultReasoning: "low", CreditRate: 1},
 		{ID: "claude-sonnet-5", DisplayName: "Claude Sonnet 5", ContextWindow: 1000000, MaxOutputTokens: 64000, SupportsImages: true, SupportsTools: true, CreditRate: 2},
 		{ID: "hy3", DisplayName: "hy3", CreditRate: 0},
 	}, nil
@@ -129,7 +129,7 @@ func TestAgentsListShape(t *testing.T) {
 			glm = m
 		}
 	}
-	if glm.Context != 200000 || !glm.Reasoning || len(glm.Efforts) != 2 {
+	if glm.Context != 200000 || !glm.Reasoning || len(glm.Efforts) != 2 || glm.DefaultEffort != "low" {
 		t.Fatalf("模型字段不符：%+v", glm)
 	}
 	if rec := e.do(t, "GET", "/api/agents", "", reqOpt{noAuth: true}); rec.Code != http.StatusUnauthorized {

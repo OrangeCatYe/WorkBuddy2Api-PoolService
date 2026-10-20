@@ -133,11 +133,13 @@ type agentModel struct {
 	Tools     bool     `json:"tools,omitempty"`
 	Reasoning bool     `json:"reasoning,omitempty"`
 	Efforts   []string `json:"efforts,omitempty"`
+	// DefaultEffort 模型目录声明的默认思考档。
+	DefaultEffort string `json:"default_effort,omitempty"`
 }
 
 func (m agentModel) model() agentcfg.Model {
 	return agentcfg.Model{ID: m.ID, Name: m.Name, Context: m.Context, MaxOutput: m.MaxOutput,
-		Vision: m.Vision, Tools: m.Tools, Reasoning: m.Reasoning, Efforts: m.Efforts}
+		Vision: m.Vision, Tools: m.Tools, Reasoning: m.Reasoning, Efforts: m.Efforts, DefaultEffort: m.DefaultEffort}
 }
 
 func asInt(v any) int {
@@ -171,6 +173,7 @@ func (a *API) catalogModels(r *http.Request) []agentModel {
 		prov, _ := e["provider"].(string)
 		sup, _ := e["supports_tools"].(bool)
 		rea, _ := e["supports_reasoning"].(bool)
+		defEffort, _ := e["reasoning_default_effort"].(string)
 		vision := false
 		for _, mod := range asStrs(e["input_modalities"]) {
 			if mod == "image" {
@@ -180,7 +183,7 @@ func (a *API) catalogModels(r *http.Request) []agentModel {
 		out = append(out, agentModel{
 			ID: id, Name: name, Provider: prov,
 			Context: asInt(e["context_window"]), MaxOutput: asInt(e["max_output_tokens"]),
-			Vision: vision, Tools: sup, Reasoning: rea, Efforts: asStrs(e["reasoning_levels"]),
+			Vision: vision, Tools: sup, Reasoning: rea, Efforts: asStrs(e["reasoning_levels"]), DefaultEffort: defEffort,
 		})
 	}
 	return out

@@ -35,6 +35,8 @@ type Model struct {
 	Tools     bool
 	Reasoning bool
 	Efforts   []string
+	// DefaultEffort 模型目录声明的默认思考档，空 = 目录没有声明。
+	DefaultEffort string
 }
 
 // Input 一次导入的参数。
