@@ -35,6 +35,7 @@ type API struct {
 	credits *credits.Service
 	runs    *taskrun.Recorder
 	upd     *update.Service
+	agent   agentState
 
 	settingsMu sync.Mutex // 串行化平台参数的读改写
 }
@@ -58,6 +59,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerProviderSettingsRoutes(mux)
 	a.registerTaskRoutes(mux)
 	a.registerUpdateRoutes(mux)
+	a.registerAgentRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {

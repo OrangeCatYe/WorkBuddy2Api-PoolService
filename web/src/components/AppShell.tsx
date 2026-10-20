@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Menu,
   Moon,
+  Plug,
   ScrollText,
   Settings,
   Sun,
@@ -36,6 +37,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     title: '网关',
     items: [
       { to: '/gateway', label: '接入与密钥', icon: <KeyRound size={16} /> },
+      { to: '/agents', label: '快速导入', icon: <Plug size={16} /> },
       { to: '/models', label: '模型目录', icon: <Boxes size={16} /> },
     ],
   },

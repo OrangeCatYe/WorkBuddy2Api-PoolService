@@ -122,6 +122,7 @@ PoolService 是一个**运行在本机的账号池网关与 Web 管理面板**�
 - **多平台框架**：平台以适配器接入，登录方式、账号操作、定时任务由适配器声明，面板自动渲染。当前支持 WorkBuddy（国内版 / 国际版）。
 - **多协议网关**：OpenAI Chat Completions、Anthropic Messages、OpenAI Responses 三种入口，ttswitch、Claude Code、Codex CLI 都能直接接入；模型能力字段与 ttswitch 对齐，思考强度五档自动映射。
 - **下游密钥**：按密钥限制模型、RPM 与每日 / 累计积分，独立统计用量。
+- **快速导入到其他 Agent**：左侧「快速导入」选好密钥和模型，一键写进 WorkBuddy、CodeBuddy、Claude Code、Claude Desktop、Codex CLI、OpenCode、Pi Agent、OMP、DeepSeek Harness 的配置。只认配置目录、不管软件装在哪；先预览再写入，写前自动备份，只改自己写入的部分，随时可移除并还原。详见 [docs/AGENT_IMPORT.md](docs/AGENT_IMPORT.md)。
 - **账号导出与导入**：勾选账号导出为 JSON 文件，在「添加账号 → 导入凭证」载入即可恢复，方便换机、重装和备份；文件与 `auths/*.json` 同形态。导出内容含令牌明文，请妥善保管。
 - **软件更新**：设置里检查新版本，下载后经签名与哈希校验，一键安装并自动重启，失败自动回滚；支持代理与自定义下载源。详见 [docs/UPDATE.md](docs/UPDATE.md)。
 - **开机自启**：发布包附带 Windows 计划任务脚本与 Linux systemd 模板，由你主动安装。
@@ -253,7 +254,9 @@ Linux 请使用 `autostart/poolsvc.service`。安全模型、镜像搭建、手�
 
 ## 接入 Claude Code / Codex CLI
 
-面板「接入与密钥」页提供可直接复制的配置片段。简要说明：
+不想手动改配置，可以直接用面板左侧的「快速导入」，见 [docs/AGENT_IMPORT.md](docs/AGENT_IMPORT.md)。
+
+手动配置时，面板「接入与密钥」页提供可直接复制的配置片段。简要说明：
 
 ```bash
 # Claude Code（Anthropic Messages）
@@ -322,6 +325,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precheck.ps1 -Quick 
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 软件更新：[docs/UPDATE.md](docs/UPDATE.md)
+- 快速导入到其他 Agent：[docs/AGENT_IMPORT.md](docs/AGENT_IMPORT.md)
 - 后续开发规则：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 分支与版本管理：[docs/BRANCHING.md](docs/BRANCHING.md)
 - 新平台接入：[docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)

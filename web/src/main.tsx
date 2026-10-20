@@ -22,6 +22,7 @@ import { GatewayPage } from '@/pages/Gateway'
 import { LogsPage } from '@/pages/Logs'
 import { UsagePage } from '@/pages/Usage'
 import { CreditsPage } from '@/pages/Credits'
+import { AgentsPage } from '@/pages/Agents'
 import { ToastProvider } from '@/components/overlay'
 
 applyInitialTheme()
@@ -44,6 +45,7 @@ const router = createBrowserRouter([
       { path: '/models', element: <ModelsPage /> },
       { path: '/credits', element: <CreditsPage /> },
       { path: '/gateway', element: <GatewayPage /> },
+      { path: '/agents', element: <AgentsPage /> },
       { path: '/usage', element: <UsagePage /> },
       { path: '/logs', element: <LogsPage /> },
       { path: '/tasks', element: <TasksPage /> },

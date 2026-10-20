@@ -424,6 +424,83 @@ export interface Quest {
   attempt?: boolean
 }
 
+// ---- 快速导入到其他 Agent ----
+export interface AgentFile {
+  path: string
+  exists: boolean
+}
+export interface AgentChoice {
+  id: string
+  label: string
+  hint?: string
+}
+export interface AgentInfo {
+  id: string
+  name: string
+  protocol: 'chat' | 'anthropic' | 'responses'
+  installed: boolean
+  evidence?: string[]
+  files: AgentFile[]
+  profiles?: AgentChoice[]
+  profile?: string
+  imported: boolean
+  imported_models?: string[]
+  supports_default: boolean
+  needs_default: boolean
+  supports_fast?: boolean
+  takeover: boolean
+  notes?: string[]
+  restart?: string
+  blocked?: string
+}
+export interface AgentModel {
+  id: string
+  name: string
+  provider: string
+  context?: number
+  max_output?: number
+  vision?: boolean
+  tools?: boolean
+  reasoning?: boolean
+  efforts?: string[]
+}
+export interface AgentsResponse {
+  agents: AgentInfo[]
+  models: AgentModel[]
+  base_url: string
+  can_write: boolean
+  write_block: string
+  local: boolean
+  no_keys: boolean
+}
+export interface AgentPlanFile {
+  path: string
+  action: 'create' | 'update' | 'delete' | 'unchanged'
+  snippet?: string
+  lang?: string
+}
+export interface AgentPlan {
+  agent: string
+  files: AgentPlanFile[]
+  imported?: string[]
+  skipped?: { id: string; reason: string }[]
+  warnings?: string[]
+  key?: { id?: string; name: string; created?: boolean; will_create?: boolean }
+  restart?: string
+  backup_dir?: string
+  written?: string[]
+  base_url?: string
+}
+export interface AgentRequest {
+  key_id: string
+  models: string[]
+  default_model: string
+  fast_model: string
+  profile: string
+  config_dir: string
+  base_url: string
+}
+
 // ---- 软件更新 ----
 
 export type UpdateState = 'idle' | 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'applying' | 'error'

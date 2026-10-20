@@ -138,3 +138,59 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 - `last_result` 在服务重启后由新进程读取更新程序写下的结果，`rolled_back=true` 表示新版本没能启动、已回滚。
 - 错误码：`400` 前置条件不满足（未检查就下载、开发版、未签名等），`403` `admin_key` 为空，`409` 正在进行其他更新操作。
 - 安装接口返回 202 后服务会在约 0.5 秒内开始退出，客户端应轮询 `status` 直到新进程应答。
+
+### 快速导入
+
+把网关地址、密钥和模型写进其他 Agent 的配置。使用说明与各 Agent 的格式见 [AGENT_IMPORT.md](AGENT_IMPORT.md)。
+
+| 接口 | 说明 |
+|---|---|
+| `GET /api/agents` | 各 Agent 的检测结果（是否检测到、将写入的文件、可选档案、是否已导入）、可导入的模型、网关地址，以及当前请求能否写入 `can_write` / `write_block`。`?key_id=` 让模型按该密钥的白名单过滤 |
+| `POST /api/agents/{id}/detect` | 按指定档案或配置目录重新检测。请求体 `{"profile": "", "config_dir": ""}` 均可省略 |
+| `POST /api/agents/{id}/preview` | 计算变更但不落盘。返回文件清单（`create / update / delete / unchanged`）与**已遮掩密钥**的受管片段 |
+| `POST /api/agents/{id}/render` | 同 `preview`，但片段含完整密钥，用于远程部署时复制。还没有任何密钥时返回 400 |
+| `POST /api/agents/{id}/apply` | 写入。返回写入的文件与备份目录；没有任何密钥时自动创建默认密钥，`key.created` 为 `true` |
+| `POST /api/agents/{id}/remove` | 移除本工具写入的内容并还原被改过的原值。请求体 `{"profile": "", "config_dir": ""}` |
+
+`{id}` 取值：`workbuddy`、`codebuddy`、`claude-code`、`claude-desktop`、`codex`、`opencode`、`pi`、`omp`、`deepseek-harness`。
+
+`preview` / `render` / `apply` 的请求体：
+
+```json
+{
+  "key_id": "key_ab12cd",
+  "models": ["glm-5.2", "hy3"],
+  "default_model": "glm-5.2",
+  "fast_model": "",
+  "profile": "",
+  "config_dir": "",
+  "base_url": ""
+}
+```
+
+- `key_id`：下游密钥 ID，`legacy` 表示配置文件里的 `legacy_api_key`。**必须由调用方指定**；只有一把密钥都没有时才可留空，此时 `apply` 自动创建一把不限模型、不限额的默认密钥。
+- `models`：沿用 `/v1/models` 的命名（受 `model_naming`、`credit_in_model_name` 影响）。所选密钥有白名单时，白名单外的模型进入返回的 `skipped`，不会中断整批。
+- `default_model` / `fast_model`：必须在 `models` 内。Claude Code 必须指定 `default_model`；Codex、OpenCode、DeepSeek Harness 为可选的「设为默认」；其余 Agent 忽略。
+- `profile`：DeepSeek Harness / OMP 的档案名，必须是实际存在的档案，不接受路径。
+- `config_dir`：配置**目录**，只会在其下写固定文件名，不接受任意文件路径。
+- `base_url`：网关对外地址，省略时由请求推导（本机请求会把 `localhost` 换成 `127.0.0.1`）。
+
+返回（`preview` / `apply`）：
+
+```json
+{
+  "agent": "codex",
+  "files": [{ "path": "…/config.toml", "action": "update", "lang": "toml", "snippet": "…" }],
+  "imported": ["glm-5.2"],
+  "skipped": [{ "id": "hy3", "reason": "所选密钥没有使用这个模型的权限" }],
+  "warnings": [],
+  "key": { "id": "key_ab12cd", "name": "ttswitch" },
+  "backup_dir": "…/data/agent-backups/codex/20261020-110950.630",
+  "written": ["…/config.toml"],
+  "restart": "新开的 codex 会话生效"
+}
+```
+
+- **`apply` 与 `remove` 只在本机可用**：要求 `admin_key` 已设置（否则 403，防止任何网页跨站借用接口改你的配置）、请求来自本机回环地址且不带 `X-Forwarded-*` 头、浏览器请求的 `Origin` 与 `Host` 一致。其余接口不受后两条限制。
+- 错误码：`400` 参数或配置不合法（文件无法解析、同名条目不是本工具写入的、没有可导入的模型等），`403` 不满足写入条件，`404` 未知 Agent，`409` 配置文件在预览之后被其他程序改过，请重新预览。
+- 响应里的 `snippet` 在 `preview` / `apply` 中密钥已遮掩；日志只记录 Agent、模型数量和文件数量，不记录密钥。

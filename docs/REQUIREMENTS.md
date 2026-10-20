@@ -118,6 +118,18 @@
 - F7.7 开机自启走发布包附带的脚本 / 模板，由用户主动安装；新增 `-background` 与无控制台时写日志文件
 - F7.8 更新相关的修改类接口要求 `admin_key` 非空；`/healthz` 增加 `version` 字段
 
+### 3.8 快速导入到其他 Agent（F8，v1.3.0）
+提案见 [proposals/2026-10-20-agent-import.md](proposals/2026-10-20-agent-import.md)，使用与各 Agent 格式见 [AGENT_IMPORT.md](AGENT_IMPORT.md)。
+- F8.1 左侧「网关」组新增「快速导入」：选密钥与模型，预览变更，一键写入九个目标（WorkBuddy、CodeBuddy、Claude Code、Claude Desktop、Codex CLI、OpenCode、Pi Agent、OMP、DeepSeek Harness）
+- F8.2 只认配置目录、不找安装位置：目录按「手动指定 > 环境变量 > 默认位置」解析；找不到时可手动指定**目录**，只在其下写固定文件名
+- F8.3 只改自己的：受管标记（供应商 `poolservice`、`vendor: "PoolService"`、`POOLSVC_` 前缀、YAML 键注释）；同名但不是本工具写入的条目一律跳过；JSON(C) 字节级编辑、TOML 文本块、YAML 节点编辑，保留注释与格式
+- F8.4 写入保护：复读校验（预览后文件被改过则拒绝）、拒绝符号链接、先备份（每个 Agent 保留最近 10 份）、原子写入、多文件失败回滚、写后重新解析校验
+- F8.5 接管类目标（Claude Code、Claude Desktop，以及 Codex / OpenCode / DSH 的「设为默认」）记录被覆盖的原值，移除时还原
+- F8.6 密钥由用户选择；只有一把密钥都没有时才在写入时自动创建「默认密钥（全部模型）」；所选密钥有白名单时只能导入白名单内的模型
+- F8.7 模型 ID 沿用网关 `/v1/models` 的命名口径；Claude Desktop 只导入 `claude-<家族>-…` 命名的模型，其余跳过并说明
+- F8.8 写入类接口要求 `admin_key` 非空、请求来自本机回环且无转发头、浏览器请求同源；远程部署时仅开放预览与「显示完整配置」
+- F8.9 新增依赖 `gopkg.in/yaml.v3`、`github.com/pelletier/go-toml/v2`（纯 Go，不影响单二进制交叉编译）
+
 ## 4. ttswitch 对接契约
 
 依据 `tt-switch-master/client/src-tauri/src/services/model_fetch.rs`、`proxy/usage/parser.rs`、`doc/TENCENT_REASONING_EFFORT_STRATEGY.md`。

@@ -167,6 +167,7 @@ score = w_edf * 浪费风险(urgency)
 
 ```text
 internal/update/        检查（latest.json + 签名）、下载与校验、安全解压、更新程序（备份 / 替换 / 拉起 / 探活 / 回滚）
+internal/agentcfg/      快速导入：九个 Agent 的配置适配器（定位目录 / 受管写入 / 还原）、保留注释的 JSONC 编辑器、带备份与回滚的提交器
 internal/sysproc/       平台相关：等待 / 结束进程、脱离父进程拉起、控制台判断（Windows 与类 Unix 各一份）
 internal/logfile/       带滚动的日志文件（无控制台时使用）
 cmd/updatectl/          发布侧工具：生成密钥、清单、签名、验签

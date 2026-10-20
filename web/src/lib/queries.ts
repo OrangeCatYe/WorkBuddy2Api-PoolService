@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, Quest, RequestEntry, TaskRun, UpdateSettings, UpdateStatus, UsageStats } from '@/types'
+import type { Account, AgentsResponse, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, Quest, RequestEntry, TaskRun, UpdateSettings, UpdateStatus, UsageStats } from '@/types'
 
 export const useMeta = () => useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/api/meta'), staleTime: 60_000 })
 
@@ -111,3 +111,10 @@ export const useUpdateStatus = () =>
   })
 
 export const useUpdateSettings = () => useQuery({ queryKey: ['update', 'settings'], queryFn: () => api<UpdateSettings>('/api/settings/update') })
+
+/** 快速导入：各 Agent 的检测结果与可导入的模型；传入密钥 ID 时模型按该密钥的白名单过滤。 */
+export const useAgents = (keyId: string) =>
+  useQuery({
+    queryKey: ['agents', keyId],
+    queryFn: () => api<AgentsResponse>(`/api/agents${keyId ? `?key_id=${encodeURIComponent(keyId)}` : ''}`),
+  })

@@ -2,7 +2,11 @@ module github.com/orangeruan/poolservice
 
 go 1.23.4
 
-require github.com/redis/go-redis/v9 v9.18.0
+require (
+	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/redis/go-redis/v9 v9.18.0
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
