@@ -23,6 +23,7 @@ import (
 	"github.com/orangeruan/poolservice/internal/providers/workbuddy"
 	"github.com/orangeruan/poolservice/internal/store/keys"
 	"github.com/orangeruan/poolservice/internal/store/requests"
+	"github.com/orangeruan/poolservice/internal/update"
 	"github.com/orangeruan/poolservice/internal/webui"
 )
 
@@ -37,6 +38,10 @@ type App struct {
 	reqs    *requests.Recorder
 	credits *credits.Service
 	runs    *taskrun.Recorder
+	updater *update.Service
+
+	stopMu sync.Mutex
+	stop   context.CancelFunc
 }
 
 // New 根据配置装配应用。
@@ -78,6 +83,9 @@ func New(cfg *config.Config) (*App, error) {
 	gw := gateway.New(current, a.reg, a.catalog, nil)
 	gw.SetKeys(a.keys)
 	gw.SetRequests(a.reqs)
+	gw.SetVersion(panelapi.Version)
+	a.updater = update.New(current, panelapi.Version)
+	a.updater.SetShutdown(a.Shutdown)
 
 	// 积分服务：用最近 31 天的请求归档重建消耗账本。
 	since := time.Now()
@@ -100,6 +108,7 @@ func New(cfg *config.Config) (*App, error) {
 	api.SetStores(a.keys, a.reqs)
 	api.SetCredits(a.credits)
 	api.SetTaskRuns(a.runs)
+	api.SetUpdater(a.updater)
 	api.Register(apiMux)
 	mux.Handle("/api/", httpx.SecurityHeaders(apiMux))
 
@@ -132,9 +141,26 @@ func (a *App) updateConfig(mut func(*config.Config)) error {
 	return nil
 }
 
+// Shutdown 请求优雅退出（与收到 SIGTERM 等价）：先关 HTTP、再停 Provider 并落盘。
+// 软件更新在安装新版本前用它让旧进程退出，保证运行状态完整写盘。
+func (a *App) Shutdown() {
+	a.stopMu.Lock()
+	stop := a.stop
+	a.stopMu.Unlock()
+	if stop != nil {
+		stop()
+	}
+}
+
 // Run 启动 Provider 后台任务与 HTTP 服务，直到 ctx 取消。
 // 退出顺序：先优雅关闭 HTTP（等在途请求结束），再逆序停止 Provider 并落盘。
 func (a *App) Run(ctx context.Context) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	a.stopMu.Lock()
+	a.stop = cancel
+	a.stopMu.Unlock()
+
 	var started []provider.Starter
 	defer func() {
 		for i := len(started) - 1; i >= 0; i-- {
@@ -168,6 +194,7 @@ func (a *App) Run(ctx context.Context) error {
 		}
 	}
 	go a.credits.Run(ctx)
+	go a.updater.Run(ctx)
 	errCh := make(chan error, 1)
 	go func() {
 		log.Printf("[app] listening on http://%s", a.server.Addr)

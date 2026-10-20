@@ -43,6 +43,21 @@ jobs:
           npm --prefix web install
           npm --prefix web run build
 
+      - name: 生成 Windows 版本信息资源
+        if: matrix.os == 'windows'
+        run: |
+          # 给 exe 嵌入公司名、产品名、描述、版本号。没有版本信息的未签名 exe 更容易被杀毒软件的启发式规则怀疑。
+          # 文件名带 _windows_amd64，Go 只会在构建 Windows 目标时链接它。
+          version=$(git describe --tags --always)
+          read -r major minor patch <<< "$(echo "$version" | sed -nE 's/^v?([0-9]+)\.([0-9]+)\.([0-9]+).*/\1 \2 \3/p')"
+          major=${major:-0}; minor=${minor:-0}; patch=${patch:-0}
+          go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.1 -64 \
+            -o cmd/poolsvc/resource_windows_amd64.syso \
+            -ver-major "$major" -ver-minor "$minor" -ver-patch "$patch" \
+            -product-ver-major "$major" -product-ver-minor "$minor" -product-ver-patch "$patch" \
+            -file-version "$major.$minor.$patch.0" -product-version "$version" \
+            cmd/poolsvc/versioninfo.json
+
       - name: 交叉编译
         env:
           CGO_ENABLED: '0'
@@ -74,6 +89,12 @@ jobs:
           cp "migrate-${{ matrix.os }}-${{ matrix.arch }}$ext" "dist/$name/migrate$ext"
           cp config.example.json README.md LICENSE "dist/$name/"
           cp CHANGELOG.pub.md "dist/$name/CHANGELOG.md"
+          mkdir -p "dist/$name/autostart"
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            cp autostart/windows.ps1 "dist/$name/autostart/"
+          else
+            cp autostart/poolsvc.service "dist/$name/autostart/"
+          fi
           if [ "${{ matrix.os }}" = "windows" ]; then
             printf '@echo off\r\npoolsvc.exe %%*\r\n' > "dist/$name/start.bat"
           else
@@ -121,6 +142,33 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.4'
+          cache: true
+
+      - name: 生成更新清单并签名
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          # latest.json 记录版本、更新说明和各平台安装包的 sha256；程序据此检查与校验更新，不走 GitHub API。
+          # 用私钥对它签名（latest.json.sig），程序用内置公钥验签：下载源换成镜像也无法伪造更新。
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::warning::$tag 不是 vX.Y.Z 正式版本标签，跳过更新清单"
+            exit 0
+          fi
+          python scripts/sanitize_changelog.py CHANGELOG.md CHANGELOG.pub.md
+          go run ./cmd/updatectl manifest -dir artifacts -tag "$tag" -changelog CHANGELOG.pub.md -out artifacts/latest.json
+          if [ -z "$UPDATE_SIGNING_KEY" ]; then
+            echo "::warning::未配置 Secret UPDATE_SIGNING_KEY：本次发布没有更新签名，客户端只会提示新版本，不允许一键安装"
+            exit 0
+          fi
+          go run ./cmd/updatectl sign -in artifacts/latest.json -out artifacts/latest.json.sig
+          # 用程序内置公钥再验一遍：Secret 里的私钥必须和 internal/update/keys.go 里的公钥是一对，
+          # 否则发出去的签名所有客户端都验不过，宁可在这里失败。
+          go run ./cmd/updatectl verify -in artifacts/latest.json -sig artifacts/latest.json.sig
 
       - name: 生成发布说明
         run: |

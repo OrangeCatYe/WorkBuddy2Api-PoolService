@@ -28,3 +28,6 @@ config.json
 .DS_Store
 
 *.tsbuildinfo
+
+# generated Windows version-info resource (built in CI)
+*.syso

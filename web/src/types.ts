@@ -423,3 +423,43 @@ export interface Quest {
   auto_desc?: string
   attempt?: boolean
 }
+
+// ---- 软件更新 ----
+
+export type UpdateState = 'idle' | 'checking' | 'up_to_date' | 'available' | 'downloading' | 'ready' | 'applying' | 'error'
+
+export interface UpdateResult {
+  ok: boolean
+  rolled_back?: boolean
+  from: string
+  to: string
+  message: string
+  at: string
+}
+
+export interface UpdateStatus {
+  state: UpdateState
+  current: { version: string; release: boolean; can_apply: boolean; reason?: string; mode: 'self' | 'supervised'; platform: string }
+  latest?: { version: string; tag: string; notes?: string; published_at?: string; size?: number; signed: boolean; installable: boolean; reason?: string }
+  source: string
+  checked_at?: string
+  error?: string
+  progress?: { done: number; total: number }
+  last_result?: UpdateResult
+}
+
+export interface UpdateSource {
+  id: string
+  name: string
+  manifest_url: string
+  asset_url: string
+  builtin?: boolean
+}
+
+export interface UpdateSettings {
+  source: string
+  sources: UpdateSource[]
+  proxy: string
+  auto_check: boolean
+  check_interval: string
+}

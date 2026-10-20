@@ -47,10 +47,35 @@ type Config struct {
 	// Credits 积分预测与选号策略。
 	Credits CreditsConfig `json:"credits"`
 
+	// Update 软件更新：下载源、代理、自动检查。
+	Update UpdateConfig `json:"update"`
+
 	// Providers 各 Provider 的私有配置，原样交给适配器解析。
 	Providers map[string]json.RawMessage `json:"providers,omitempty"`
 
 	path string
+}
+
+// UpdateConfig 软件更新配置。全部字段可选，缺省值见 normalize。
+type UpdateConfig struct {
+	// Source 当前使用的下载源 ID；内置 "github"，其余来自 Sources。
+	Source string `json:"source"`
+	// Sources 自定义下载源（镜像、Gitee、自建），清单里只写文件名，URL 由模板拼出。
+	Sources []UpdateSource `json:"sources,omitempty"`
+	// Proxy 访问下载源使用的代理（http / https / socks5）；空 = 跟随系统环境变量。
+	Proxy string `json:"proxy,omitempty"`
+	// AutoCheck 启动后和定期自动检查更新（只检查，不下载不安装）。默认关闭。
+	AutoCheck bool `json:"auto_check"`
+	// CheckInterval 自动检查间隔，最短 1 小时，默认 24 小时。
+	CheckInterval Duration `json:"check_interval"`
+}
+
+// UpdateSource 一个自定义下载源。
+type UpdateSource struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ManifestURL string `json:"manifest_url"` // latest.json 的地址，签名文件为其后加 .sig
+	AssetURL    string `json:"asset_url"`    // 安装包地址模板，可用 {tag} {version} {name}
 }
 
 // GatewayConfig 网关配置。
@@ -93,6 +118,7 @@ func Default() *Config {
 			CatalogTTL:  Duration{10 * time.Minute},
 		},
 		Credits:   CreditsConfig{Strategy: "waste_first", WasteBoost: 4, ExpensiveRate: 0.5, BurnWindowDays: 7},
+		Update:    UpdateConfig{Source: "github", CheckInterval: Duration{24 * time.Hour}},
 		Providers: map[string]json.RawMessage{},
 	}
 }
@@ -100,13 +126,14 @@ func Default() *Config {
 // Path 配置文件路径。
 func (c *Config) Path() string { return c.path }
 
-// Clone 深拷贝（Providers 原始 JSON 段逐个复制）。
+// Clone 深拷贝（Providers 原始 JSON 段、更新源列表逐个复制）。
 func (c *Config) Clone() *Config {
 	n := *c
 	n.Providers = make(map[string]json.RawMessage, len(c.Providers))
 	for k, v := range c.Providers {
 		n.Providers[k] = append(json.RawMessage(nil), v...)
 	}
+	n.Update.Sources = append([]UpdateSource(nil), c.Update.Sources...)
 	return &n
 }
 
@@ -167,6 +194,25 @@ func (c *Config) normalize() {
 		c.Providers = map[string]json.RawMessage{}
 	}
 	c.Credits.Normalize()
+	c.Update.Normalize()
+}
+
+// MinCheckInterval 自动检查更新的最短间隔。
+const MinCheckInterval = time.Hour
+
+// Normalize 补全缺省值，修正非法值。
+func (u *UpdateConfig) Normalize() {
+	u.Source = strings.TrimSpace(u.Source)
+	if u.Source == "" {
+		u.Source = "github"
+	}
+	u.Proxy = strings.TrimSpace(u.Proxy)
+	switch {
+	case u.CheckInterval.Duration <= 0:
+		u.CheckInterval = Duration{24 * time.Hour}
+	case u.CheckInterval.Duration < MinCheckInterval:
+		u.CheckInterval = Duration{MinCheckInterval}
+	}
 }
 
 // ProviderConfig 把某 Provider 的配置解码到 out；未配置时保持 out 默认值。

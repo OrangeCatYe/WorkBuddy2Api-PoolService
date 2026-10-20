@@ -111,7 +111,20 @@ const decisions = requests.slice(0, 8).map((r, i) => ({ time: r.time, provider: 
     bias: n < 2 ? 2.6 : 1, share: [0.3, 0.24, 0.18, 0.12, 0.09, 0.07][n], tier: 0 })),
 }))
 const fixtures = {
-  '/api/meta': { version: '1.0.2', started_at: iso(-2), providers: [provider], gateway: { model_naming: 'short', credit_in_model_name: false } },
+  '/api/meta': { version: '1.1.0', started_at: iso(-2), providers: [provider], gateway: { model_naming: 'short', credit_in_model_name: false } },
+  '/api/update/status': {
+    state: 'available', source: 'github', checked_at: iso(0, -3),
+    current: { version: 'v1.1.0', release: true, can_apply: true, mode: 'self', platform: 'windows-amd64' },
+    latest: { version: '1.2.0', tag: 'v1.2.0', published_at: iso(-1), size: 6291456, signed: true, installable: true,
+      notes: '### 新增\n- 设置新增「软件更新」：检查新版本，下载后经签名与哈希校验，一键安装并自动重启\n- 支持自定义下载源与代理，网络受限时可切换镜像\n\n### 变更\n- 开机自启改为发布包内附带的脚本，由用户主动运行' },
+  },
+  '/api/settings/update': {
+    source: 'github', proxy: '', auto_check: false, check_interval: '24h0m0s',
+    sources: [
+      { id: 'github', name: 'GitHub（官方）', builtin: true, manifest_url: 'https://github.com/example/poolsvc/releases/latest/download/latest.json', asset_url: 'https://github.com/example/poolsvc/releases/download/{tag}/{name}' },
+      { id: 'mirror', name: '自建镜像', manifest_url: 'https://mirror.example.com/poolsvc/latest.json', asset_url: 'https://mirror.example.com/poolsvc/{tag}/{name}' },
+    ],
+  },
   '/api/overview': { summary, providers: [summary], now: iso() },
   '/api/accounts': { accounts }, '/api/models': { models, errors: {} },
   '/api/credits': credits, '/api/credits/decisions': { decisions }, '/api/usage/stats': usage,
@@ -278,12 +291,13 @@ async function main() {
     await capture(cdp, sessionId, 'gateway', '/gateway', 1440, 1100)
     await capture(cdp, sessionId, 'usage', '/usage', 1440, 1220)
     await capture(cdp, sessionId, 'models', '/models', 1440, 760)
+    await capture(cdp, sessionId, 'update-panel', '/settings?tab=update', 1440, 900)
     await capture(cdp, sessionId, 'mobile-accounts', '/accounts', 390, 844)
     await capture(cdp, sessionId, 'cover', '/_readme/cover', 1600, 1380)
     const errors = cdp.events.filter((e) => e.method === 'Runtime.exceptionThrown' || e.params.entry?.level === 'error')
     if (errors.length) throw new Error(`Browser errors: ${JSON.stringify(errors)}`)
     console.log('Verified: all pages rendered without browser errors; fictional fixtures only.')
-    for (const name of ['cover', 'overview-light', 'overview-dark', 'accounts', 'credits', 'gateway', 'usage', 'models', 'mobile-accounts']) {
+    for (const name of ['cover', 'overview-light', 'overview-dark', 'accounts', 'credits', 'gateway', 'usage', 'models', 'update-panel', 'mobile-accounts']) {
       const info = await stat(join(output, `${name}.png`)); console.log(`${name}.png ${(info.size / 1024).toFixed(0)} KiB`)
     }
   } finally {

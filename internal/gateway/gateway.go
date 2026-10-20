@@ -41,6 +41,7 @@ type Gateway struct {
 	picker  provider.Picker
 	keys    *keys.Store
 	reqs    *requests.Recorder
+	version string
 
 	observers []func(requests.Entry)
 }
@@ -49,6 +50,9 @@ type Gateway struct {
 func New(cfg func() *config.Config, reg *provider.Registry, catalog *router.Catalog, picker provider.Picker) *Gateway {
 	return &Gateway{cfg: cfg, reg: reg, catalog: catalog, picker: picker}
 }
+
+// SetVersion 设置 /healthz 报告的程序版本。更新程序靠它确认新版本真的跑起来了。
+func (g *Gateway) SetVersion(v string) { g.version = v }
 
 // SetKeys 注入下游 Key 存储（nil = 只接受配置文件中的 legacy_api_key）。
 func (g *Gateway) SetKeys(s *keys.Store) { g.keys = s }
@@ -135,7 +139,7 @@ func (g *Gateway) healthz(w http.ResponseWriter, r *http.Request) {
 	if usable == 0 {
 		status = http.StatusServiceUnavailable
 	}
-	httpx.WriteJSON(w, status, map[string]any{"service": "poolservice", "healthy": usable, "total": total})
+	httpx.WriteJSON(w, status, map[string]any{"service": "poolservice", "version": g.version, "healthy": usable, "total": total})
 }
 
 func (g *Gateway) models(w http.ResponseWriter, r *http.Request) {

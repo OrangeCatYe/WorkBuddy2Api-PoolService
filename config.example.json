@@ -17,6 +17,12 @@
     "legacy_api_key": "sk-change-me",
     "allow_anonymous": false
   },
+  "update": {
+    "source": "github",
+    "proxy": "",
+    "auto_check": false,
+    "check_interval": "24h"
+  },
   "providers": {
     "workbuddy": {
       "enabled": true,

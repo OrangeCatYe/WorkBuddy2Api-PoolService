@@ -142,6 +142,14 @@ git push origin vx.y.z
 5. 推送 `v*` 标签自动触发 Release 工作流，交叉编译 Windows / Linux amd64 产物、
    生成校验和并创建 Release。日常提交只跑 CI，不产生 Release。
 
+### 更新签名
+
+发布流水线会生成 `latest.json` 并用 Secret `UPDATE_SIGNING_KEY` 签名，程序据此提供一键更新。发版前确认这个 Secret 已配置：
+
+- 私钥与 `internal/update/keys.go` 里的公钥必须是一对，流水线会用内置公钥再验一遍，不匹配则发布失败。
+- 没有配置时发布仍会完成，但只有警告：该版本没有签名，客户端只提示、不允许一键安装。
+- 私钥不入库。丢失私钥等于无法再给已发布的客户端签名，需要走「轮换密钥」流程，见 [UPDATE.md](UPDATE.md#发版者须知)。
+
 ### 关于等待 CI
 
 **不主动等待或轮询远端 CI 结果。** 本地预检已覆盖除 `-race` 外的全部检查，

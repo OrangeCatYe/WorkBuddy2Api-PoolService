@@ -123,6 +123,8 @@ PoolService 是一个**运行在本机的账号池网关与 Web 管理面板**�
 - **多协议网关**：OpenAI Chat Completions、Anthropic Messages、OpenAI Responses 三种入口，ttswitch、Claude Code、Codex CLI 都能直接接入；模型能力字段与 ttswitch 对齐，思考强度五档自动映射。
 - **下游密钥**：按密钥限制模型、RPM 与每日 / 累计积分，独立统计用量。
 - **账号导出与导入**：勾选账号导出为 JSON 文件，在「添加账号 → 导入凭证」载入即可恢复，方便换机、重装和备份；文件与 `auths/*.json` 同形态。导出内容含令牌明文，请妥善保管。
+- **软件更新**：设置里检查新版本，下载后经签名与哈希校验，一键安装并自动重启，失败自动回滚；支持代理与自定义下载源。详见 [docs/UPDATE.md](docs/UPDATE.md)。
+- **开机自启**：发布包附带 Windows 计划任务脚本与 Linux systemd 模板，由你主动安装。
 - **请求日志与用量分析**：每个请求的账号、token、缓存命中、积分、耗时一目了然（不记录对话内容）。
 - **积分中心**：预测每批积分到期前能否用完，按到期压力把收费请求优先分给快过期的账号，每次选号都能回放原因。详见 [docs/CREDITS.md](docs/CREDITS.md)。
 - **积分显示精度**：完整显示积分，默认到个位；设置中可切换两位小数，全站即时联动。
@@ -148,6 +150,7 @@ poolsvc-windows-amd64.zip  /  poolsvc-linux-amd64.tar.gz
 ├── poolsvc          主服务（Windows 为 poolsvc.exe）
 ├── migrate          旧版迁移工具（Windows 为 migrate.exe）
 ├── start.bat / start.sh    启动脚本
+├── autostart/              开机自启（Windows 计划任务脚本 / Linux systemd 模板）
 ├── config.example.json     配置模板
 ├── README.md  LICENSE  CHANGELOG.md
 ```
@@ -184,6 +187,26 @@ scripts/build.sh
 # 面板: http://127.0.0.1:7863
 ```
 
+## 软件更新与开机自启
+
+在「设置 → 软件更新」检查新版本：下载后程序会用内置公钥验签、用清单里的 sha256 校验安装包，通过后点「安装并重启」即可。配置、数据和账号凭证不会被改动，更新前自动备份，新版本起不来会自动回滚。
+
+[![软件更新页：当前版本、新版本说明、下载更新按钮以及下载源与代理设置](docs/images/update-panel.png)](docs/images/update-panel.png)
+
+- 网络访问 GitHub 不稳定时，可以配置代理，或添加镜像 / Gitee 等自定义下载源；镜像不需要被信任，内容照样验签。
+- 自动检查默认关闭，开启后只检查、不会自动安装。
+- 更新需要 `config.json` 里设置了 `admin_key`；从源码构建的开发版只提示新版本，不会被覆盖。
+- v1.2.0 之前的版本没有此功能，第一次需要手动换包。
+
+开机自启由你主动安装，程序本身不会写注册表或改启动项：
+
+```powershell
+# Windows：当前用户的计划任务，登录时后台启动，无需管理员权限
+powershell -NoProfile -ExecutionPolicy Bypass -File autostart\windows.ps1 install -StartNow
+```
+
+Linux 请使用 `autostart/poolsvc.service`。安全模型、镜像搭建、手动回滚与排障见 [docs/UPDATE.md](docs/UPDATE.md)。
+
 ## 配置
 
 ```jsonc
@@ -195,6 +218,12 @@ scripts/build.sh
     "legacy_api_key": "sk-...",           // 下游 Agent 使用的 API Key
     "model_naming": "short",              // short / full / both
     "credit_in_model_name": false         // 模型名附加积分倍率
+  },
+  "update": {
+    "source": "github",                   // 下载源，其余可在设置页添加
+    "proxy": "",                          // 访问下载源的代理，空 = 跟随系统环境变量
+    "auto_check": false,                  // 自动检查更新（只检查，不安装）
+    "check_interval": "24h"
   },
   "providers": {
     "workbuddy": {
@@ -292,6 +321,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/precheck.ps1 -Quick 
 
 - 需求：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)
 - 架构：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 软件更新：[docs/UPDATE.md](docs/UPDATE.md)
 - 后续开发规则：[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 - 分支与版本管理：[docs/BRANCHING.md](docs/BRANCHING.md)
 - 新平台接入：[docs/PROVIDER_GUIDE.md](docs/PROVIDER_GUIDE.md)

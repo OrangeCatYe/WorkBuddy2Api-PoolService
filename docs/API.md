@@ -9,7 +9,7 @@ PoolService 对外提供三种协议入口，共用同一套鉴权、限额、�
 | `POST /v1/messages/count_tokens` | Anthropic（估算） | Claude Code |
 | `POST /v1/responses` | OpenAI Responses | Codex CLI、OpenAI Agents SDK |
 | `GET /v1/models` | OpenAI | 所有客户端 |
-| `GET /healthz` | - | 探活（无需鉴权） |
+| `GET /healthz` | - | 探活（无需鉴权）。响应 `{"service","version","healthy","total"}`；账号池里没有可用账号时状态码为 503，但仍带 `version`，软件更新靠它确认新版本已启动 |
 
 ## 鉴权
 
@@ -89,6 +89,11 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 | `POST /api/providers/{pid}/accounts/{aid}/quests/accept` | 接受全部未接受的任务 |
 | `PUT /api/providers/{pid}/settings` | 修改参数，只提交改动项：`{"values": {"pool.max_in_flight": 4}}`；校验失败返回 400 且不改动任何状态 |
 | `POST /api/providers/{pid}/export` | 导出所选账号的配置。请求体 `{"account_ids": [...]}`；返回 `{"count", "missing", "accounts"}`，其中 `accounts` 即可保存为文件、并在「添加账号 → 导入凭证」中原样导入的内容。**含登录令牌明文**，详见下节 |
+| `GET /api/update/status` | 软件更新状态：当前版本、最新版本、状态机、下载进度、上次更新结果 |
+| `POST /api/update/check` | 检查更新。请求体 `{"source": "<下载源ID>"}` 可省略；网络与校验失败体现在返回的 `state=error` / `error`，不是 HTTP 错误 |
+| `POST /api/update/download` | 后台下载并校验最新版本，进度从 `status` 轮询。需要 `admin_key` |
+| `POST /api/update/apply` | 安装已下载的版本并重启服务，返回 202。需要 `admin_key` |
+| `GET /api/settings/update` / `PUT /api/settings/update` | 下载源、代理、自动检查。`PUT` 需要 `admin_key`；代理地址里的密码读取时显示为 `***`，原样提交表示不修改 |
 
 ### 导出账号配置
 
@@ -110,3 +115,26 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 - 平台需要实现 `AccountExporter` 才有此接口，否则返回 400。当前 WorkBuddy 已支持。
 
 积分相关接口见 [CREDITS.md](CREDITS.md)。
+
+### 软件更新
+
+完整说明见 [UPDATE.md](UPDATE.md)。`GET /api/update/status` 的返回：
+
+```json
+{
+  "state": "available",
+  "source": "github",
+  "checked_at": "2026-10-20T10:00:00Z",
+  "current": { "version": "v1.1.0", "release": true, "can_apply": true, "mode": "self", "platform": "windows-amd64" },
+  "latest": { "version": "1.2.0", "tag": "v1.2.0", "size": 6291456, "signed": true, "installable": true, "notes": "…" },
+  "progress": { "done": 1000000, "total": 6291456 },
+  "last_result": { "ok": true, "from": "v1.1.0", "to": "v1.2.0", "message": "已更新到 v1.2.0", "at": "…" }
+}
+```
+
+- `state`：`idle`（未检查）/ `checking` / `up_to_date` / `available` / `downloading` / `ready`（已下载并校验）/ `applying` / `error`。
+- `current.can_apply` 为 `false` 时 `reason` 说明原因：开发版、安装目录不可写、未设置 `admin_key`。
+- `latest.installable` 为 `false` 表示清单没有有效签名或没有本平台安装包，只能手动下载。清单**有签名但验不过**不会出现在这里，而是 `state=error`。
+- `last_result` 在服务重启后由新进程读取更新程序写下的结果，`rolled_back=true` 表示新版本没能启动、已回滚。
+- 错误码：`400` 前置条件不满足（未检查就下载、开发版、未签名等），`403` `admin_key` 为空，`409` 正在进行其他更新操作。
+- 安装接口返回 202 后服务会在约 0.5 秒内开始退出，客户端应轮询 `status` 直到新进程应答。

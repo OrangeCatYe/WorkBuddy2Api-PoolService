@@ -1,0 +1,33 @@
+# PoolService systemd unit (Linux).
+#
+# Install:
+#   sudo useradd --system --home /opt/poolsvc --shell /usr/sbin/nologin poolsvc   # once; or delete the User= line to run as root
+#   sudo chown -R poolsvc: /opt/poolsvc
+#   sudo cp autostart/poolsvc.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now poolsvc
+# Logs:    journalctl -u poolsvc -f
+# Remove:  sudo systemctl disable --now poolsvc && sudo rm /etc/systemd/system/poolsvc.service
+#
+# Edit WorkingDirectory and ExecStart if you unpacked somewhere other than /opt/poolsvc.
+#
+# Software update: when the program runs under systemd it replaces its own files in place and
+# exits, and systemd restarts it (hence Restart=always). The service user must be able to write
+# to the install directory, otherwise one-click update is disabled and only shows a hint.
+
+[Unit]
+Description=PoolService account pool gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=poolsvc
+WorkingDirectory=/opt/poolsvc
+ExecStart=/opt/poolsvc/poolsvc
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -163,7 +163,35 @@ score = w_edf * 浪费风险(urgency)
 - 组件：自建轻量 UI 组件库（Button / Card / Table / Drawer / Dialog / Badge / Tabs / Toast），统一设计令牌（颜色、圆角、间距），明暗主题
 - 构建产物输出到 `internal/webui/dist`，由 Go `embed` 打包
 
-## 7. Git 约定
+## 7. 软件更新
+
+```text
+internal/update/        检查（latest.json + 签名）、下载与校验、安全解压、更新程序（备份 / 替换 / 拉起 / 探活 / 回滚）
+internal/sysproc/       平台相关：等待 / 结束进程、脱离父进程拉起、控制台判断（Windows 与类 Unix 各一份）
+internal/logfile/       带滚动的日志文件（无控制台时使用）
+cmd/updatectl/          发布侧工具：生成密钥、清单、签名、验签
+```
+
+```mermaid
+sequenceDiagram
+    participant UI as 面板
+    participant M as 主程序
+    participant U as 更新程序 (新版 update-apply)
+    UI->>M: POST /api/update/apply
+    M->>M: 预检: 运行新版 version
+    M->>U: 拉起并等待 alive 标记
+    U-->>M: alive
+    M-->>UI: 202
+    M->>M: 优雅退出并落盘
+    U->>U: 等旧进程退出, 备份, 替换
+    U->>M: 拉起新版, 探活 /healthz 版本
+    U->>U: 失败则回滚并拉起旧版
+```
+
+更新程序是新版本自己的二进制，因此替换逻辑永远是最新的，也不需要随包分发额外的可执行文件。
+由 systemd 等服务管理器托管时，更新程序作为子进程会随服务的 cgroup 一并被清理，所以改为主进程自己替换文件后退出，由服务管理器重启。
+
+## 8. Git 约定
 
 - `main`：稳定分支；每阶段在 `feat/*` 开发，完成后 `--no-ff` 合并
 - 提交信息：Conventional Commits，如 `feat(gateway): 输出 ttswitch 兼容的模型字段`

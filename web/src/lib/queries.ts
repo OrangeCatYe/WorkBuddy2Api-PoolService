@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from './api'
-import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, Quest, RequestEntry, TaskRun, UsageStats } from '@/types'
+import type { Account, ApiKey, ConnectInfo, CreditsSnapshot, Decision, GatewaySettings, Meta, ModelEntry, Overview, ProviderDetail, ProviderSettings, Quest, RequestEntry, TaskRun, UpdateSettings, UpdateStatus, UsageStats } from '@/types'
 
 export const useMeta = () => useQuery({ queryKey: ['meta'], queryFn: () => api<Meta>('/api/meta'), staleTime: 60_000 })
 
@@ -101,3 +101,13 @@ export const useQuests = (pid?: string, aid?: string, enabled = true) =>
     staleTime: 30_000,
     retry: false,
   })
+
+/** 更新状态；下载中每 0.7 秒刷新进度，其余时候不轮询。 */
+export const useUpdateStatus = () =>
+  useQuery({
+    queryKey: ['update', 'status'],
+    queryFn: () => api<UpdateStatus>('/api/update/status'),
+    refetchInterval: (q) => (q.state.data?.state === 'downloading' ? 700 : false),
+  })
+
+export const useUpdateSettings = () => useQuery({ queryKey: ['update', 'settings'], queryFn: () => api<UpdateSettings>('/api/settings/update') })

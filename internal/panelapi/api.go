@@ -17,6 +17,7 @@ import (
 	"github.com/orangeruan/poolservice/internal/httpx"
 	"github.com/orangeruan/poolservice/internal/store/keys"
 	"github.com/orangeruan/poolservice/internal/store/requests"
+	"github.com/orangeruan/poolservice/internal/update"
 )
 
 // Version 服务版本（构建时 -ldflags 注入）。
@@ -33,6 +34,7 @@ type API struct {
 	reqs    *requests.Recorder
 	credits *credits.Service
 	runs    *taskrun.Recorder
+	upd     *update.Service
 
 	settingsMu sync.Mutex // 串行化平台参数的读改写
 }
@@ -55,6 +57,7 @@ func (a *API) Register(mux *http.ServeMux) {
 	a.registerCreditsRoutes(mux)
 	a.registerProviderSettingsRoutes(mux)
 	a.registerTaskRoutes(mux)
+	a.registerUpdateRoutes(mux)
 }
 
 func (a *API) auth(next http.HandlerFunc) http.HandlerFunc {

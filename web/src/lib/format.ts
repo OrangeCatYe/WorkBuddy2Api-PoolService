@@ -60,3 +60,16 @@ export function pct(part: number, total: number): number {
   if (!total || total <= 0) return 0
   return Math.max(0, Math.min(100, (part / total) * 100))
 }
+
+/** 字节数：12.3 MB。 */
+export function fmtBytes(n: number | undefined | null): string {
+  if (!n || n < 0) return '—'
+  const u = ['B', 'KB', 'MB', 'GB']
+  let i = 0
+  let v = n
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${u[i]}`
+}

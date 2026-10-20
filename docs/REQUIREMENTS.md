@@ -107,6 +107,17 @@
 - F6.4 安全：仅 POST、`no-store`、`admin_key` 为空时拒绝、日志不记令牌；导出文件含令牌明文，不加密（加密会破坏与 `auths/*.json` 的同形态兼容）
 - F6.5 能力驱动：平台实现 `provider.AccountExporter` 才显示入口，当前仅 WorkBuddy；不导出余额、冷却等运行态
 
+### 3.7 软件更新（F7，v1.2.0）
+提案见 [proposals/2026-10-19-remote-update.md](proposals/2026-10-19-remote-update.md)，使用与运维见 [UPDATE.md](UPDATE.md)。
+- F7.1 设置页检查更新、下载、一键安装并自动重启；仅 `vX.Y.Z` 正式版可自动更新，开发版只提示
+- F7.2 发布附带 `latest.json` 与 ed25519 签名（`latest.json.sig`）；程序用内置公钥验签，清单内含安装包 sha256；只接受高于当前的版本；有签名但验不过一律拒绝，无签名只提示不允许安装
+- F7.3 下载源可选：内置官方 GitHub 源走 `releases/latest/download` 直链（不占 API 额度），可添加镜像 / Gitee / 自建源（清单地址 + 安装包地址模板），支持 http / https / socks5 代理
+- F7.4 更新程序即新版本自身的 `poolsvc update-apply` 子命令：旧进程先优雅退出，超时才强制结束 → 备份 → 替换 → 拉起 → 探活，失败自动回滚；更新程序没起来则旧服务不退出
+- F7.5 文件白名单：只替换程序与文档，`config.json`、`data/`、`auths/` 绝不触碰，启动脚本仅缺失时补
+- F7.6 避免误报：不生成或执行脚本、不用 `%TEMP%`、不写注册表与启动项、必须用户点击才执行、Windows 二进制嵌入版本信息
+- F7.7 开机自启走发布包附带的脚本 / 模板，由用户主动安装；新增 `-background` 与无控制台时写日志文件
+- F7.8 更新相关的修改类接口要求 `admin_key` 非空；`/healthz` 增加 `version` 字段
+
 ## 4. ttswitch 对接契约
 
 依据 `tt-switch-master/client/src-tauri/src/services/model_fetch.rs`、`proxy/usage/parser.rs`、`doc/TENCENT_REASONING_EFFORT_STRATEGY.md`。

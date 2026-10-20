@@ -3,8 +3,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, ArrowUpRight, RotateCcw, RotateCw, Search } from 'lucide-react'
 import { api } from '@/lib/api'
-import { useGatewaySettings, useMeta, useModels, useProviderSettings } from '@/lib/queries'
+import { useGatewaySettings, useMeta, useModels, useProviderSettings, useUpdateStatus } from '@/lib/queries'
 import { Segmented, Switch, useToast } from '@/components/overlay'
+import { UpdatePanel } from '@/components/UpdatePanel'
 import { formatCredit } from '@/lib/format'
 import { setCreditPrecision, useCreditPrecision } from '@/lib/creditDisplay'
 import { Badge, Button, Card, CardHeader, Empty, Skeleton, cx } from '@/components/ui'
@@ -382,10 +383,12 @@ function ProviderTab({ pid }: { pid: string }) {
 
 export function SettingsPage() {
   const { data: meta } = useMeta()
+  const { data: upd } = useUpdateStatus()
   const [params, setParams] = useSearchParams()
   const configurable = (meta?.providers ?? []).filter((p) => p.capabilities?.includes('settings'))
   const tab = params.get('tab') ?? 'gateway'
-  const tabs = [{ id: 'gateway', name: '网关' }, ...configurable.map((p) => ({ id: p.id, name: p.name }))]
+  const hasUpdate = upd?.state === 'available' || upd?.state === 'ready'
+  const tabs = [{ id: 'gateway', name: '网关' }, { id: 'update', name: '软件更新' }, ...configurable.map((p) => ({ id: p.id, name: p.name }))]
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -394,13 +397,14 @@ export function SettingsPage() {
           <button
             key={t.id}
             onClick={() => setParams(t.id === 'gateway' ? {} : { tab: t.id }, { replace: true })}
-            className={cx('shrink-0 rounded-lg px-3.5 py-1.5 text-[13px] transition-colors', tab === t.id ? 'bg-ink text-bg' : 'text-muted hover:text-ink')}
+            className={cx('relative shrink-0 rounded-lg px-3.5 py-1.5 text-[13px] transition-colors', tab === t.id ? 'bg-ink text-bg' : 'text-muted hover:text-ink')}
           >
             {t.name}
+            {t.id === 'update' && hasUpdate && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" title="有新版本" />}
           </button>
         ))}
       </div>
-      {tab === 'gateway' ? <GatewayTab /> : <ProviderTab key={tab} pid={tab} />}
+      {tab === 'gateway' ? <GatewayTab /> : tab === 'update' ? <UpdatePanel /> : <ProviderTab key={tab} pid={tab} />}
     </div>
   )
 }
