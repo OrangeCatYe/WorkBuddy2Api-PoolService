@@ -2,6 +2,24 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+## [1.2.0] - 2026-10-20
+
+### 新增
+- 软件更新：「设置 → 软件更新」可检查 GitHub 上的新版本，下载后经 ed25519 签名与 sha256 校验，一键安装并自动重启；新版本启动失败会自动回滚。检查走 `releases/latest/download/latest.json` 直链，不占 GitHub 匿名 API 额度。新增接口 `GET /api/update/status`、`POST /api/update/check|download|apply`、`GET|PUT /api/settings/update`，详见 `docs/UPDATE.md`
+- 下载源与代理：内置官方 GitHub 源，可在设置里添加镜像、Gitee 或自建源（清单与安装包地址模板），支持 http、https、socks5 代理；镜像无需被信任，内容仍由内置公钥验签、sha256 校验
+- 自动检查更新（默认关闭，最短间隔 1 小时）：只检查，不自动下载或安装
+- 发布包附带开机自启文件：Windows 的 `autostart/windows.ps1`（当前用户计划任务，无需管理员）和 Linux 的 `autostart/poolsvc.service`。自启项由用户主动安装，主程序和更新程序不写注册表、不改启动项
+- 新增 `-background` 启动参数：释放控制台窗口，日志写入 `data/logs/poolsvc.log`（5 MB 滚动，保留 3 份）；没有控制台时（开机自启、重定向输出）日志也自动写入该文件
+- 新增子命令 `poolsvc version`（打印版本号）和 `poolsvc update-apply`（更新程序入口，由主程序拉起，无需手动运行）
+- 发布流程：新增 `cmd/updatectl` 生成并签名 `latest.json`；Windows 二进制嵌入版本信息（公司、产品名、说明、版本号）以降低杀毒软件误报
+
+### 变更
+- `GET /healthz` 响应新增 `version` 字段（只增不改，原有字段不变），更新程序据此确认新版本已启动
+- `config.json` 新增可选的 `update` 段，全部有默认值，旧配置原样可用
+- 发版需要在仓库 Secret 中配置 `UPDATE_SIGNING_KEY`；未配置时发布仍会完成，但没有签名，客户端只提示新版本、不允许一键安装
+
 ## [1.1.0] - 2026-10-19
 
 ### 新增
