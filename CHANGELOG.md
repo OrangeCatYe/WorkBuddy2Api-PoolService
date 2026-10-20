@@ -4,6 +4,11 @@
 
 ## [未发布]
 
+## [1.3.1] - 2026-10-20
+
+### 修复
+- 快速导入：WorkBuddy / CodeBuddy 的模型条目补上 `reasoning.supportedEfforts` 与 `reasoning.defaultEffort`，导入后界面可以选择思考强度；此前只写了 `supportsReasoning`，没有档位声明。默认档取模型目录声明的值，目录没有声明时取 high、medium，再不行取最后一档；目录没有给出档位的模型不写。已导入的用户在卡片上点「更新」即可补上
+
 ## [1.3.0] - 2026-10-20
 
 ### 新增
