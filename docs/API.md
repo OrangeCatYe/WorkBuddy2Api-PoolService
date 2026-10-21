@@ -162,6 +162,8 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
   "models": ["glm-5.2", "hy3"],
   "default_model": "glm-5.2",
   "fast_model": "",
+  "opus_model": "",
+  "sonnet_model": "",
   "profile": "",
   "config_dir": "",
   "base_url": ""
@@ -170,7 +172,8 @@ Messages 与 Responses 在网关内部转换为 Chat Completions 后转发，响
 
 - `key_id`：下游密钥 ID，`legacy` 表示配置文件里的 `legacy_api_key`。**必须由调用方指定**；只有一把密钥都没有时才可留空，此时 `apply` 自动创建一把不限模型、不限额的默认密钥。
 - `models`：沿用 `/v1/models` 的命名（受 `model_naming`、`credit_in_model_name` 影响）。所选密钥有白名单时，白名单外的模型进入返回的 `skipped`，不会中断整批。
-- `default_model` / `fast_model`：必须在 `models` 内。Claude Code 必须指定 `default_model`；Codex、OpenCode、DeepSeek Harness 为可选的「设为默认」；其余 Agent 忽略。
+- `default_model`：必须在 `models` 内。Claude Code 必须指定；Codex、OpenCode、DeepSeek Harness 为可选的「设为默认」；其余 Agent 忽略。
+- `fast_model` / `opus_model` / `sonnet_model`：仅 Claude Code 使用，分别对应 Haiku、Opus、Sonnet 三个档位别名，必须在 `models` 内；留空表示跟随 `default_model`。
 - `profile`：DeepSeek Harness / OMP 的档案名，必须是实际存在的档案，不接受路径。
 - `config_dir`：配置**目录**，只会在其下写固定文件名，不接受任意文件路径。
 - `base_url`：网关对外地址，省略时由请求推导（本机请求会把 `localhost` 换成 `127.0.0.1`）。

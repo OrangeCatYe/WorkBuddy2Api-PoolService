@@ -244,7 +244,7 @@ func TestClaudeCodeTakeoverAndRestore(t *testing.T) {
 		t.Fatal("没有主模型时应当报错")
 	}
 	in := testInput()
-	in.Default, in.Fast = "glm-5.2", "hy3"
+	in.Default, in.Fast, in.Opus = "glm-5.2", "hy3", "claude-sonnet-5"
 	res := h.build(in)
 	if len(res.Warnings) != 0 {
 		t.Fatalf("不应有警告：%v", res.Warnings)
@@ -255,8 +255,22 @@ func TestClaudeCodeTakeoverAndRestore(t *testing.T) {
 	}
 	envMap := jsonMap(t, got)["env"].(map[string]any)
 	if envMap["ANTHROPIC_BASE_URL"] != "http://127.0.0.1:7863" || envMap["ANTHROPIC_AUTH_TOKEN"] != testKey ||
-		envMap["ANTHROPIC_MODEL"] != "glm-5.2" || envMap["ANTHROPIC_SMALL_FAST_MODEL"] != "hy3" || envMap["KEEP"] != "1" {
+		envMap["ANTHROPIC_MODEL"] != "glm-5.2" || envMap["KEEP"] != "1" {
 		t.Fatalf("env 不符：%v", envMap)
+	}
+	// 三个档位别名：Opus 单独指定，Sonnet 没指定所以跟随主模型，Haiku 用快速模型（旧版的 SMALL_FAST 同值）。
+	for k, want := range map[string]string{
+		"ANTHROPIC_DEFAULT_OPUS_MODEL":   "claude-sonnet-5",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5.2",
+		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  "hy3",
+		"ANTHROPIC_SMALL_FAST_MODEL":     "hy3",
+	} {
+		if envMap[k] != want {
+			t.Fatalf("%s = %v，想要 %s：%v", k, envMap[k], want, envMap)
+		}
+	}
+	if !reflect.DeepEqual(res.Imported, []string{"glm-5.2", "claude-sonnet-5", "hy3"}) {
+		t.Fatalf("Imported = %v", res.Imported)
 	}
 	if info := h.detect(Options{}); !info.Imported || info.ImportedModels[0] != "glm-5.2" {
 		t.Fatalf("Detect = %+v", info)
@@ -270,8 +284,11 @@ func TestClaudeCodeTakeoverAndRestore(t *testing.T) {
 	if envMap["ANTHROPIC_MODEL"] != "claude-sonnet-5" {
 		t.Fatalf("模型未更新：%v", envMap)
 	}
-	if _, has := envMap["ANTHROPIC_SMALL_FAST_MODEL"]; has {
-		t.Fatalf("不再需要的快速模型应被还原（原先不存在）：%v", envMap)
+	// 没有单独指定的档位一律跟随主模型，不能留成 Claude Code 内置的 Claude 模型 ID（网关里没有，会 404）。
+	for _, k := range []string{"ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL"} {
+		if envMap[k] != "claude-sonnet-5" {
+			t.Fatalf("%s 应跟随主模型：%v", k, envMap)
+		}
 	}
 
 	h.remove(Options{})
@@ -280,6 +297,46 @@ func TestClaudeCodeTakeoverAndRestore(t *testing.T) {
 	}
 }
 
+// 用户原来就自己配过档位别名：接管时记下原值，移除时逐项还原；没配过的移除后不留痕迹。
+func TestClaudeCodeTierMappingRestoresUserValues(t *testing.T) {
+	env := testEnv(t)
+	file := filepath.Join(env.Home, ".claude", "settings.json")
+	orig := "{\n  \"env\": {\n    \"ANTHROPIC_DEFAULT_OPUS_MODEL\": \"my-opus\",\n    \"ANTHROPIC_DEFAULT_HAIKU_MODEL\": \"my-haiku\"\n  }\n}\n"
+	writeFile(t, file, orig)
+	h := newHarness(t, claudeCode{}, env)
+
+	in := testInput()
+	in.Default = "glm-5.2"
+	h.build(in)
+	envMap := jsonMap(t, readFile(t, file))["env"].(map[string]any)
+	for _, k := range []string{"ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL"} {
+		if envMap[k] != "glm-5.2" {
+			t.Fatalf("%s 应被接管为主模型：%v", k, envMap)
+		}
+	}
+	// 再导入一次：第二次不能把「我们自己写的值」当成用户的原值记下来。
+	in.Opus = "claude-sonnet-5"
+	h.build(in)
+	h.remove(Options{})
+	if got := readFile(t, file); got != orig {
+		t.Fatalf("移除后应还原成用户自己的档位配置\n想要：%q\n实际：%q", orig, got)
+	}
+}
+
+// 记录丢失时：只删确定是我们写的主模型三项，档位别名可能是用户自己的，不能动。
+func TestClaudeCodeRemoveWithoutLedgerKeepsTierAliases(t *testing.T) {
+	env := testEnv(t)
+	file := filepath.Join(env.Home, ".claude", "settings.json")
+	writeFile(t, file, "{\n  \"env\": {\n    \"ANTHROPIC_BASE_URL\": \"http://127.0.0.1:7863\",\n    \"ANTHROPIC_AUTH_TOKEN\": \""+testKey+"\",\n    \"ANTHROPIC_MODEL\": \"glm-5.2\",\n    \"ANTHROPIC_DEFAULT_OPUS_MODEL\": \"user-opus\"\n  }\n}\n")
+	res, err := claudeCode{}.Remove(env, Options{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := string(res.Changes[0].After)
+	if !strings.Contains(after, "user-opus") || strings.Contains(after, "glm-5.2") {
+		t.Fatalf("记录丢失时不能删档位别名：\n%s", after)
+	}
+}
 func TestClaudeCodeWarnsAboutAPIKeyAndHelper(t *testing.T) {
 	env := testEnv(t)
 	file := filepath.Join(env.Home, ".claude", "settings.json")

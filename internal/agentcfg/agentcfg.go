@@ -45,7 +45,9 @@ type Input struct {
 	APIKey  string
 	Models  []Model
 	Default string // 默认模型 ID，空 = 不改 Agent 当前默认
-	Fast    string // 快速模型 ID（仅 Claude Code 使用）
+	Fast    string // Haiku 档（后台小任务）模型 ID，仅 Claude Code 使用；空 = 跟随 Default
+	Opus    string // Opus 档模型 ID，仅 Claude Code 使用；空 = 跟随 Default
+	Sonnet  string // Sonnet 档模型 ID，仅 Claude Code 使用；空 = 跟随 Default
 	Profile string // DSH / OMP 的档案名
 	Dir     string // 用户手动指定的配置目录
 }

@@ -496,6 +496,8 @@ export interface AgentRequest {
   models: string[]
   default_model: string
   fast_model: string
+  opus_model: string
+  sonnet_model: string
   profile: string
   config_dir: string
   base_url: string

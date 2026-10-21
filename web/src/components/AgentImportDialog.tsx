@@ -83,6 +83,8 @@ export function AgentImportDialog({ agent, ctx, onClose }: { agent: AgentInfo | 
   const [wantDefault, setWantDefault] = useState(true)
   const [defaultModel, setDefaultModel] = useState('')
   const [fastModel, setFastModel] = useState('')
+  const [opusModel, setOpusModel] = useState('')
+  const [sonnetModel, setSonnetModel] = useState('')
   const [profile, setProfile] = useState('')
   const [dir, setDir] = useState('')
   const [advanced, setAdvanced] = useState(false)
@@ -109,6 +111,8 @@ export function AgentImportDialog({ agent, ctx, onClose }: { agent: AgentInfo | 
     setWantDefault(true)
     setDefaultModel(isCode ? (imported[0] ?? base[0] ?? '') : (chosen[0] ?? ''))
     setFastModel('')
+    setOpusModel('')
+    setSonnetModel('')
     setProfile(agent.profile ?? '')
     setDir('')
     setAdvanced(false)
@@ -182,12 +186,14 @@ export function AgentImportDialog({ agent, ctx, onClose }: { agent: AgentInfo | 
     })
 
   const request = (): AgentRequest => {
-    const ids = isCode ? [...new Set([defaultModel, fastModel].filter(Boolean))] : chosenModels.map((m) => m.id)
+    const ids = isCode ? [...new Set([defaultModel, fastModel, opusModel, sonnetModel].filter(Boolean))] : chosenModels.map((m) => m.id)
     return {
       key_id: ctx.keyId,
       models: ids,
       default_model: takeDefault ? defaultModel : '',
       fast_model: isCode ? fastModel : '',
+      opus_model: isCode ? opusModel : '',
+      sonnet_model: isCode ? sonnetModel : '',
       profile,
       config_dir: dir.trim(),
       base_url: ctx.baseUrl,
@@ -318,8 +324,8 @@ export function AgentImportDialog({ agent, ctx, onClose }: { agent: AgentInfo | 
             )}
 
             {isCode ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Section title="主模型" hint="必选">
+              <div className="space-y-3">
+                <Section title="主模型" hint="必选，会话默认使用">
                   <select value={defaultModel} onChange={(e) => setDefaultModel(e.target.value)} className={selectCls}>
                     {usable.map((m) => (
                       <option key={m.id} value={m.id}>
@@ -328,15 +334,29 @@ export function AgentImportDialog({ agent, ctx, onClose }: { agent: AgentInfo | 
                     ))}
                   </select>
                 </Section>
-                <Section title="快速模型" hint="可选，用于后台小任务">
-                  <select value={fastModel} onChange={(e) => setFastModel(e.target.value)} className={selectCls}>
-                    <option value="">不设置</option>
-                    {usable.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name || m.id}
-                      </option>
+                <Section title="Claude 档位映射" hint="Claude Code 的 opus / sonnet / haiku 别名各指向哪个模型；不指定的跟随主模型">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {(
+                      [
+                        { label: 'Opus', hint: '复杂任务、/model opus', value: opusModel, set: setOpusModel },
+                        { label: 'Sonnet', hint: '日常编码、/model sonnet', value: sonnetModel, set: setSonnetModel },
+                        { label: 'Haiku', hint: '后台小任务、会话标题', value: fastModel, set: setFastModel },
+                      ] as const
+                    ).map((t) => (
+                      <label key={t.label} className="block space-y-1">
+                        <span className="text-[12px] font-medium text-ink">{t.label}</span>
+                        <select value={t.value} onChange={(e) => t.set(e.target.value)} className={selectCls}>
+                          <option value="">跟随主模型</option>
+                          {usable.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name || m.id}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="block text-[11.5px] text-faint">{t.hint}</span>
+                      </label>
                     ))}
-                  </select>
+                  </div>
                 </Section>
               </div>
             ) : (

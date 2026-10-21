@@ -56,8 +56,13 @@ type claudeCode struct{}
 func (claudeCode) ID() string   { return "claude-code" }
 func (claudeCode) Name() string { return "Claude Code" }
 
-var ccEnvKeys = struct{ Base, Token, Model, Fast, APIKey string }{
+// ccEnvKeys 中 Fast 是旧版本使用的 ANTHROPIC_SMALL_FAST_MODEL（新版本已改用 Haiku）。
+// Claude Code 的 opus / sonnet / haiku 三个别名各自独立解析；没有映射的别名会回落到它内置的
+// Claude 模型 ID（例如后台任务用的 claude-sonnet-4-5-20250929），网关里没有这些模型，就会 404。
+// 所以三个别名每次都显式写入，没有单独指定的跟随主模型。
+var ccEnvKeys = struct{ Base, Token, Model, Fast, APIKey, Opus, Sonnet, Haiku string }{
 	"ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "ANTHROPIC_API_KEY",
+	"ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
 }
 
 func (claudeCode) dir(env Env, dirOpt string) string {
@@ -167,20 +172,27 @@ func (c claudeCode) Build(env Env, in Input, prev Prev) (*Result, error) {
 	}
 	snippetEnv := Obj{{ccEnvKeys.Base, in.AnthropicBase()}, {ccEnvKeys.Token, in.APIKey}, {ccEnvKeys.Model, in.Default}}
 	res.Imported = []string{in.Default}
-	if in.Fast != "" {
-		if err := set(ccEnvKeys.Fast, in.Fast); err != nil {
+
+	// 三个档位别名：没有单独指定的跟随主模型。Haiku 档同时写入旧版使用的 SMALL_FAST。
+	tier := func(own string) string {
+		if own != "" {
+			return own
+		}
+		return in.Default
+	}
+	for _, t := range []struct{ key, model string }{
+		{ccEnvKeys.Opus, tier(in.Opus)},
+		{ccEnvKeys.Sonnet, tier(in.Sonnet)},
+		{ccEnvKeys.Haiku, tier(in.Fast)},
+		{ccEnvKeys.Fast, tier(in.Fast)},
+	} {
+		if err := set(t.key, t.model); err != nil {
 			return nil, err
 		}
-		snippetEnv = append(snippetEnv, KV{ccEnvKeys.Fast, in.Fast})
-		if in.Fast != in.Default {
-			res.Imported = append(res.Imported, in.Fast)
+		snippetEnv = append(snippetEnv, KV{t.key, t.model})
+		if !containsStr(res.Imported, t.model) {
+			res.Imported = append(res.Imported, t.model)
 		}
-	} else if _, tracked := p["env."+ccEnvKeys.Fast]; tracked {
-		// 之前由本工具写过快速模型，这次不要了：还原成原值。
-		if _, err := restorePrev(ed, p, "env."+ccEnvKeys.Fast, "env", ccEnvKeys.Fast); err != nil {
-			return nil, err
-		}
-		delete(p, "env."+ccEnvKeys.Fast)
 	}
 	if hadAPIKey {
 		res.Warnings = append(res.Warnings, "env 中已有 ANTHROPIC_API_KEY，Claude Code 可能优先使用它而不是本网关的密钥；如果请求没有走到本网关，请手动删除这一项")
@@ -216,13 +228,13 @@ func (c claudeCode) Remove(env Env, opt Options, prev Prev) (*Result, error) {
 	if !tracked && !strings.HasPrefix(token, "sk-pool-") {
 		return nil, errors.New("没有发现本工具写入的 Claude Code 配置，无需移除")
 	}
-	for _, k := range []string{ccEnvKeys.Base, ccEnvKeys.Token, ccEnvKeys.Model, ccEnvKeys.Fast} {
+	for _, k := range []string{ccEnvKeys.Base, ccEnvKeys.Token, ccEnvKeys.Model, ccEnvKeys.Opus, ccEnvKeys.Sonnet, ccEnvKeys.Haiku, ccEnvKeys.Fast} {
 		restored, err := restorePrev(ed, prev, "env."+k, "env", k)
 		if err != nil {
 			return nil, err
 		}
-		// 没有还原记录（记录文件丢失）时，只删除确定是我们写的三项。
-		if !restored && k != ccEnvKeys.Fast {
+		// 没有还原记录（记录文件丢失）时，只删除确定是我们写的三项；档位别名可能是用户自己的，不碰。
+		if !restored && (k == ccEnvKeys.Base || k == ccEnvKeys.Token || k == ccEnvKeys.Model) {
 			if err := ed.Delete("env", k); err != nil {
 				return nil, err
 			}

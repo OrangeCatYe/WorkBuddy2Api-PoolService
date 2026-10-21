@@ -309,6 +309,37 @@ func TestAgentDefaultModelMustBeSelected(t *testing.T) {
 	}
 }
 
+// Claude Code 的三个档位别名：经接口写入后落盘；指定的模型必须在已选范围内；没指定的跟随主模型。
+func TestAgentClaudeCodeTierMapping(t *testing.T) {
+	e := newAgentAPI(t, "adm")
+	k, _ := e.ks.Create(keys.Spec{Name: "k"}, "")
+	post := func(body string) *httptest.ResponseRecorder {
+		return e.do(t, "POST", "/api/agents/claude-code/apply", body, reqOpt{})
+	}
+	// 档位模型不在已选范围内：拒绝，并指明是哪一档。
+	for field, label := range map[string]string{"opus_model": "Opus", "sonnet_model": "Sonnet", "fast_model": "Haiku"} {
+		rec := post(`{"key_id":"` + k.ID + `","models":["glm-5.2"],"default_model":"glm-5.2","` + field + `":"hy3"}`)
+		if rec.Code != 400 || !strings.Contains(rec.Body.String(), label) {
+			t.Fatalf("%s 不在已选范围应拒绝并指明档位：%d %s", field, rec.Code, rec.Body.String())
+		}
+	}
+	rec := post(`{"key_id":"` + k.ID + `","models":["glm-5.2","claude-sonnet-5","hy3"],"default_model":"glm-5.2","opus_model":"claude-sonnet-5","fast_model":"hy3"}`)
+	if rec.Code != 200 {
+		t.Fatalf("code=%d %s", rec.Code, rec.Body.String())
+	}
+	got := readTestFile(t, filepath.Join(e.home, ".claude", "settings.json"))
+	for _, want := range []string{
+		`"ANTHROPIC_MODEL": "glm-5.2"`,
+		`"ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-sonnet-5"`,
+		`"ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5.2"`,
+		`"ANTHROPIC_DEFAULT_HAIKU_MODEL": "hy3"`,
+		`"ANTHROPIC_SMALL_FAST_MODEL": "hy3"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("缺少 %s：\n%s", want, got)
+		}
+	}
+}
 func TestAgentRemoveRestores(t *testing.T) {
 	e := newAgentAPI(t, "adm")
 	k, _ := e.ks.Create(keys.Spec{Name: "k"}, "")

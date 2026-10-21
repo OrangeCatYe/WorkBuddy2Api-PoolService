@@ -118,6 +118,8 @@ type agentReq struct {
 	Models       []string `json:"models"`
 	DefaultModel string   `json:"default_model"`
 	FastModel    string   `json:"fast_model"`
+	OpusModel    string   `json:"opus_model"`
+	SonnetModel  string   `json:"sonnet_model"`
 	Profile      string   `json:"profile"`
 	ConfigDir    string   `json:"config_dir"`
 	BaseURL      string   `json:"base_url"`
@@ -393,17 +395,21 @@ func (a *API) prepare(w http.ResponseWriter, r *http.Request, ad agentcfg.Adapte
 	}
 	def := strings.TrimSpace(req.DefaultModel)
 	fast := strings.TrimSpace(req.FastModel)
+	opus := strings.TrimSpace(req.OpusModel)
+	sonnet := strings.TrimSpace(req.SonnetModel)
 	if def != "" && !has(def) {
 		writeErr(w, http.StatusBadRequest, "默认模型必须是已选择且所选密钥可用的模型之一")
 		return nil, false
 	}
-	if fast != "" && !has(fast) {
-		writeErr(w, http.StatusBadRequest, "快速模型必须是已选择且所选密钥可用的模型之一")
-		return nil, false
+	for _, c := range []struct{ id, label string }{{fast, "Haiku 档（快速）模型"}, {opus, "Opus 档模型"}, {sonnet, "Sonnet 档模型"}} {
+		if c.id != "" && !has(c.id) {
+			writeErr(w, http.StatusBadRequest, c.label+"必须是已选择且所选密钥可用的模型之一")
+			return nil, false
+		}
 	}
 	pr.in = agentcfg.Input{
 		BaseURL: base, APIKey: key.Secret, Models: models,
-		Default: def, Fast: fast, Profile: strings.TrimSpace(req.Profile), Dir: strings.TrimSpace(req.ConfigDir),
+		Default: def, Fast: fast, Opus: opus, Sonnet: sonnet, Profile: strings.TrimSpace(req.Profile), Dir: strings.TrimSpace(req.ConfigDir),
 	}
 	return pr, true
 }

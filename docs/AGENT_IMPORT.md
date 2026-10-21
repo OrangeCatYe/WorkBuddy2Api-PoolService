@@ -5,7 +5,7 @@
 ## 使用
 
 1. 在页面顶部选好**使用的密钥**（所选密钥有模型白名单时，只能导入白名单内的模型）；Agent 与本服务不在同一台电脑时，改一下**网关地址**。
-2. 点要导入的 Agent 卡片上的「导入」，勾选模型；Claude Code 选主模型，Codex、OpenCode、DeepSeek Harness 可选「设为默认模型」。
+2. 点要导入的 Agent 卡片上的「导入」，勾选模型；Claude Code 选主模型并可指定 Opus、Sonnet、Haiku 三个档位各用哪个模型，Codex、OpenCode、DeepSeek Harness 可选「设为默认模型」。
 3. 点「预览变更」，核对将写入的文件和内容（密钥已遮掩）。
 4. 点「写入」。完成后按提示重启对应的应用。
 
@@ -38,7 +38,9 @@ Windows 下 `~` 是用户目录；Claude Desktop 的数据目录是 `%LOCALAPPDA
 ### 写入内容
 
 - **WorkBuddy / CodeBuddy**：往 `models` 数组追加条目，条目带 `"vendor": "PoolService"` 作标记；`availableModels` 存在时同步追加。`url` 写完整的 `…/v1/chat/completions`，这是官方文档要求的写法。
-- **Claude Code**：写 `env` 里的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`，选了快速模型时再写 `ANTHROPIC_SMALL_FAST_MODEL`。这是全局设置，写入后所有会话都改走本网关。
+- **Claude Code**：写 `env` 里的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`，以及三个档位别名 `ANTHROPIC_DEFAULT_OPUS_MODEL`、`ANTHROPIC_DEFAULT_SONNET_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL`（旧版本读的 `ANTHROPIC_SMALL_FAST_MODEL` 与 Haiku 档同值）。没有单独指定的档位跟随主模型。这是全局设置，写入后所有会话都改走本网关。
+  - 为什么三个档位每次都写：Claude Code 的 `/model opus`、`/model sonnet`、子代理、后台任务（会话标题、提交信息等）会按别名解析模型，没有映射就回落到它内置的 Claude 模型 ID（例如 `claude-sonnet-4-5-20250929`），网关里没有这些模型，请求会 404。
+  - 移除时逐项还原：你原来自己配过的档位别名会恢复成原值，没配过的删除。
 - **Claude Desktop**：用 3P（第三方网关）模式，写一份独立档案并设为当前启用，把 `deploymentMode` 切到 `3p`。模型菜单只接受 `claude-<家族>-…` 命名的模型，其余自动跳过。
 - **Codex CLI**：在 `# >>> PoolService managed >>>` 标记块里写 `[model_providers.poolservice]`；勾选「设为默认」时再改顶层 `model` 与 `model_provider`。
 - **OpenCode**：写 `provider.poolservice`（`@ai-sdk/openai-compatible`）；勾选「设为默认」时改顶层 `model`。
