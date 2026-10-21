@@ -4,6 +4,11 @@
 
 ## [未发布]
 
+## [1.3.3] - 2026-10-20
+
+### 修复
+- Claude（Anthropic Messages 接口）经中转或其他网关转发时，报 `API Error: 400 unsupported role "system" 的问题。标准协议只允许 `user` / `assistant` 消息，系统提示放在顶层 `system`，但中转后常把 `system` / `developer` 消息直接放进 `messages`。现在网关接受这两种角色，把内容并入顶层 `system`（顶层在前、按出现顺序追加）合成一条放在最前面，其余消息顺序不变；内容可以是字符串或文本块数组，空内容忽略。没有任何 `user` / `assistant` 消息、或出现其他未知角色时仍然返回 400
+
 ## [1.3.2] - 2026-10-20
 
 ### 修复
