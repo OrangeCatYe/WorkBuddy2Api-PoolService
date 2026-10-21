@@ -1346,7 +1346,8 @@ func TestStatusRequiresAuth(t *testing.T) {
 }
 
 // TestContentBlockedTriggersDegradedRetry passthrough 模式下首请求 400（11128 文案）
-// → 降级重试（Degraded）→ 200，客户端无感。验证第二次出站 body 为 Degraded。
+// → 先补中性开头行重试（仍 400，说明不是 system 开头的问题）→ 再降级重试（Degraded）→ 200，
+// 客户端无感。验证第三次出站 body 为 Degraded，第二次是「原提示 + 补开头行」。
 func TestContentBlockedTriggersDegradedRetry(t *testing.T) {
 	// 记录每次出站请求体，断言第二次为 Degraded 文本。
 	var bodies [][]byte
@@ -1354,8 +1355,8 @@ func TestContentBlockedTriggersDegradedRetry(t *testing.T) {
 		HTTP: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 			raw, _ := io.ReadAll(r.Body)
 			bodies = append(bodies, raw)
-			// 首次（body 含原始 system）返回 400 内容拦截；后续返回 200。
-			if len(bodies) == 1 {
+			// 前两次（原始 system、补开头行后）返回 400 内容拦截；之后返回 200。
+			if len(bodies) <= 2 {
 				return &http.Response{
 					StatusCode: 400,
 					Header:     http.Header{"Content-Type": []string{"application/json"}},
@@ -1380,24 +1381,29 @@ func TestContentBlockedTriggersDegradedRetry(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("code=%d body=%s (want 200 after degraded retry)", rec.Code, rec.Body)
 	}
-	if len(bodies) != 2 {
-		t.Fatalf("want 2 upstream calls (first 400 + retry), got %d", len(bodies))
+	if len(bodies) != 3 {
+		t.Fatalf("want 3 upstream calls (400 + neutral-opening retry 400 + degraded retry), got %d", len(bodies))
 	}
-	// 第二次出站 body 的 messages 头部 system 内容应为 Degraded 文本。
-	if !strings.Contains(string(bodies[1]), prompt.Degraded) {
-		t.Errorf("second body should contain Degraded prompt: %s", bodies[1])
+	// 第二次：原提示一字不动，只在最前面补了一行中性开头。
+	if !strings.Contains(string(bodies[1]), "You are a helpful assistant.\\n原始指纹") {
+		t.Errorf("second body should be original system with a neutral opening line: %s", bodies[1])
 	}
-	if strings.Contains(string(bodies[1]), "原始指纹") {
-		t.Errorf("second body should not contain original system: %s", bodies[1])
+	// 第三次出站 body 的 messages 头部 system 内容应为 Degraded 文本。
+	if !strings.Contains(string(bodies[2]), prompt.Degraded) {
+		t.Errorf("third body should contain Degraded prompt: %s", bodies[2])
+	}
+	if strings.Contains(string(bodies[2]), "原始指纹") {
+		t.Errorf("third body should not contain original system: %s", bodies[2])
 	}
 }
 
 // TestContentBlockedStickyDegraded 降级后新请求直达 Degraded（不再先撞 400）。
+// 前两次都被拒（原提示、补开头行后），才会走到降级。
 func TestContentBlockedStickyDegraded(t *testing.T) {
-	var firstCall bool
+	var calls int
 	up := newFakeUpstream(t, func(authz string) (int, string, bool) {
-		if !firstCall {
-			firstCall = true
+		calls++
+		if calls <= 2 {
 			return 400, `{"code":11128,"msg":"blocked by security policy"}`, false
 		}
 		return 200, sseOK, true

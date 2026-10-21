@@ -28,6 +28,11 @@ func PrepareBodyOptWithEfforts(src []byte, sanitize bool, efforts map[string][]s
 // defaultEfforts（模型声明默认档）补档。defaultEfforts 为 nil 时与旧行为一致
 // （deepseek 缺档回退硬编码 high）。
 func PrepareBodyOptWithEffortsAndDefault(src []byte, sanitize bool, efforts map[string][]string, defaultEfforts map[string]string) []byte {
+	return prepareBodyWith(src, sanitize, efforts, defaultEfforts, nil)
+}
+
+// prepareBodyWith 是完整管线本体。learned 为该 Client 学到的渠道校验开头（可为 nil）。
+func prepareBodyWith(src []byte, sanitize bool, efforts map[string][]string, defaultEfforts map[string]string, learned *openingSet) []byte {
 	if len(src) == 0 {
 		return src
 	}
@@ -82,6 +87,12 @@ func PrepareBodyOptWithEffortsAndDefault(src []byte, sanitize bool, efforts map[
 	if sanitize {
 		if msgs, ok := obj["messages"].([]any); ok {
 			sanitizeMessages(msgs)
+			// 渠道校验（11128）的 system 开头指纹：放在脱敏之后——Claude Code 的身份句已被
+			// 脱敏改写，不会再命中清单，请求体与改动前逐字节一致；命中的（DeepSeek Harness 等）
+			// 只在最前面补一行中性的话，宿主提示原文不动。受脱敏开关约束：关闭即完全还原。
+			if keys := neutralizeSystemOpenings(msgs, false, learned); len(keys) > 0 {
+				log.Printf("channel opening neutralized n=%d", len(keys))
+			}
 		}
 	}
 	out, err := json.Marshal(obj)

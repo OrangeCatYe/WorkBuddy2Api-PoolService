@@ -62,9 +62,7 @@ func GatewayHint(kind ErrKind, msg string, ctx HintContext) string {
 	case ErrModelBlocked:
 		return "upstream has no such model on this backend; switch model or retry on another account"
 	case ErrContentBlocked:
-		// 措辞不含 "upstream"：content_blocked 响应有不含上游字样的既有口径
-		// （handler_test 的泄漏守卫），hint 遵守同一口径。
-		return "request content was rejected by content policy; adjust the prompt and retry"
+		return contentBlockedHint(msg, ctx)
 	default:
 		// ErrNone/ErrNotFound/ErrServer/ErrBadParams/ErrClient 等未覆盖形态：无 hint。
 		return ""
@@ -78,6 +76,41 @@ type HintContext struct {
 	HasImage            bool   // 请求体是否携带 image_url part
 	ModelSupportsImages bool   // 模型目录 supports_images 声明（仅 ModelInCatalog 时有意义）
 	ModelInCatalog      bool   // 模型目录是否收录该模型（「不支持」判定的前提）
+
+	// SystemOpenings 被渠道校验拦截时，实际上线的 system 消息开头（每条第一行，已截断）。
+	SystemOpenings []string
+	// PromptRetried 网关已在本请求内用「中性开头行 / 最小提示词」重试过且仍被拒：
+	// 此时 system 开头大概率不是原因，hint 不能再把矛头指向它。
+	PromptRetried bool
+	// ModeCustom 提示词模式为 custom：system 是网关自己的提示词，不能再建议用户切到 custom。
+	ModeCustom bool
+}
+
+// contentBlockedHint ErrContentBlocked 的 gateway_hint。
+//
+// 渠道校验（11128）这一道门：上游对它写的 displayTips（「可能不是官方客户端发出的」）是误导性文案——
+// 真正的判据是 system 消息的开头，与账号、额度、网络、客户端形态都无关，换账号也不会改变结果。
+// 判据只认 msg 文案，不认 displayTips（同码的另两道门提示语一字不差）。
+// 措辞不含 "upstream"：content_blocked 响应有不含上游字样的既有口径，hint 遵守同一口径。
+func contentBlockedHint(msg string, ctx HintContext) string {
+	const generic = "request content was rejected by content policy; adjust the prompt and retry"
+	if !IsChannelReject(msg) {
+		return generic
+	}
+	var b strings.Builder
+	b.WriteString("the channel check rejected this request; it matches the opening of system messages and is unrelated to the account, credits or network, so switching accounts will not help")
+	if len(ctx.SystemOpenings) > 0 {
+		b.WriteString("; system opening(s) sent: ")
+		b.WriteString(quoteOpenings(ctx.SystemOpenings))
+	}
+	if ctx.PromptRetried {
+		b.WriteString("; the gateway already retried with a neutral opening line and a minimal system prompt and it was still rejected, so the system prompt is probably not the cause")
+	} else if ctx.ModeCustom {
+		b.WriteString("; the system prompt in use is the gateway's own, reword its opening")
+	} else {
+		b.WriteString("; reword the opening of that system prompt, or set providers.workbuddy.prompt.mode to custom")
+	}
+	return b.String()
 }
 
 // noHealthyHint 本地调度类错误（池中无健康号可用/传输层抖动，无上游原文可透传）

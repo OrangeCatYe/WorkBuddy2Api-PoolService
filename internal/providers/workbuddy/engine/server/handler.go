@@ -706,6 +706,20 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// 降级裁决：append 在降级期退化为 replace（Rewrite(Degraded)）——append 带
 	// 指纹原文重试是确定性再撞墙，replace 是一次性最小抢救（issue #129 设计 §4）。
 	degradedApplied := false
+	// 渠道校验（11128）拦截的处理状态（见 upstream/channel.go）：
+	//   - openingFixed：已对 system 消息补过中性开头行重试（只做一次，防死循环）；
+	//   - fixedKeys：这次补了开头行的消息的学习键，只在「补完这一跳真的通过」时才记进学习集合；
+	//   - blockedOpenings：第一次被拒时实际上线的 system 开头，终局失败时回显给客户端。
+	openingFixed := false
+	var fixedKeys []string
+	var blockedOpenings []string
+	learnFixed := func() {
+		if len(fixedKeys) > 0 && h.cfg.Upstream != nil {
+			h.cfg.Upstream.LearnChannelOpenings(fixedKeys)
+			log.Printf("INFO: [server] channel opening learned n=%d (neutral opening line fixed the rejection)", len(fixedKeys))
+		}
+		fixedKeys = nil
+	}
 	if h.cfg.PromptMode == "custom" && h.cfg.PromptText != "" {
 		body = prompt.Rewrite(body, h.cfg.PromptText)
 	} else if h.cfg.PromptMode == "append" && h.cfg.PromptText != "" && !h.degrade.Active() {
@@ -872,6 +886,31 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				kind = upstream.Classify(status, string(respBody))
 				uerr = &upstream.Error{Kind: kind, Status: status, Msg: string(respBody)}
 			}
+			// 渠道校验（11128）：网关按 system 消息的开头做指纹匹配，清单是实测快照、会过期。
+			// 先采一份证据：第一次被拒时实际上线的 system 开头（终局失败时回显给客户端）。
+			if kind == upstream.ErrContentBlocked && blockedOpenings == nil && h.cfg.Upstream != nil {
+				blockedOpenings = h.cfg.Upstream.WireSystemOpenings(acct.Realm(), body)
+				log.Printf("WARN: [server] request rejected by upstream content/channel check acct=%s model=%s system openings=%q",
+					logfmt.Label(acct.UID, acct.Nickname), bareModel, blockedOpenings)
+			}
+			// 命中时先只给每条 system 消息补一行中性开头行再试一次：宿主提示原文一字不动，
+			// 比直接换成最小提示词（并粘性降级到次日零点、让所有客户端都丢掉自己的提示词）轻得多。
+			// 补完通过 → 记下这些开头（见成功分支的 learnFixed），之后出站前就处理，不再先撞一次。
+			// 只在透传 / 追加模式做：custom 模式的 system 是网关自己的提示词。
+			// 不占轮转名额（i--）：占了的话 MaxRotate 较小时后面的降级重试会被饿死，
+			// 末端会把这次被拒误报成「无可用账号」；openingFixed 保证只做一次，不会死循环。
+			if kind == upstream.ErrContentBlocked && (h.cfg.PromptMode == "passthrough" || h.cfg.PromptMode == "append") && !openingFixed && !degradedApplied {
+				if fixed, keys := upstream.NeutralizeSystemOpenings(body); len(keys) > 0 {
+					body = fixed
+					openingFixed = true
+					fixedKeys = keys
+					delete(tried, acct.UID) // 单账号池也能拿到重试机会
+					releaseHeld()
+					log.Printf("WARN: [server] channel check rejected request -> retry with neutral opening line on %d system message(s)", len(keys))
+					i--
+					continue
+				}
+			}
 			// 内容拦截误报（passthrough/append 模式首遇）：判定为 system 指纹误报，
 			// 触发降级到次日 00:00 CST，换 Degraded 中性提示词同请求内重试（append
 			// 降级重试同样退化为 replace——原文在场只会确定性再撞 400）。
@@ -881,6 +920,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				h.degrade.Trigger()
 				body = prompt.Rewrite(body, prompt.Degraded)
 				degradedApplied = true
+				fixedKeys = nil         // 通过的是最小提示词而不是补开头行，不能把开头记成「已修复」
 				delete(tried, acct.UID) // 单账号池也能拿到重试机会（降级重试占一次名额）
 				releaseHeld()
 				log.Printf("content-blocked (likely fingerprint false positive) -> degraded prompt retry")
@@ -898,8 +938,12 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					// 空 body 兜底：无上游原文可透传，保留可读分类文案（不编造原文）。
 					msg = "content blocked by upstream content firewall"
 				}
+				hctx := h.hintContext(bareModel, reqHasImage)
+				hctx.SystemOpenings = blockedOpenings
+				hctx.PromptRetried = openingFixed || degradedApplied
+				hctx.ModeCustom = h.cfg.PromptMode == "custom"
 				writeOpenAIErrorHint(w, http.StatusBadRequest, "content_blocked", msg,
-					h.hintOf(upstream.ErrContentBlocked, string(respBody), bareModel, reqHasImage, uerr))
+					upstream.GatewayHint(upstream.ErrContentBlocked, string(respBody), hctx))
 				st.status = http.StatusBadRequest
 				st.outcome = reqlog.OutcomeHTTPError
 				return
@@ -1025,6 +1069,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			default:
 				// 真成功：这一跳读完且上游没有报错，才记成功并让粘性跟上。
 				st.outcome = reqlog.OutcomeSuccess
+				learnFixed()
 				h.cfg.Pool.NoteSuccess(acct.UID)
 				// 11102 负缓存清命：该账号该模型实测成功，立即解除避让（不必等 TTL 到期）。
 				// BlockModelClear 按 "11102" reason 前缀识别，只清 11102 条目、不碰 6004 独立冷却。
@@ -1111,6 +1156,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		st.outcome = reqlog.OutcomeSuccess
 		st.toks = completionTokens(resp)
 		// 非流式同理：聚合成功（无 error 帧、非空流）才算这一跳成功，事后才记成功/绑粘性。
+		learnFixed()
 		h.cfg.Pool.NoteSuccess(acct.UID)
 		h.cfg.Pool.BlockModelClear(acct.UID, bareModel)
 		if sessKey != "" && h.cfg.Session != nil {
