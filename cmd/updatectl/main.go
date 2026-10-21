@@ -3,6 +3,7 @@
 //
 //	updatectl keygen  -out <目录>
 //	updatectl manifest -dir <产物目录> -tag vX.Y.Z -changelog <CHANGELOG.md> -out latest.json
+//	updatectl notes   -tag vX.Y.Z -changelog <CHANGELOG.md> -out notes.md                 （生成 Release 页面正文）
 //	updatectl sign    -in latest.json -out latest.json.sig        （私钥取自环境变量 UPDATE_SIGNING_KEY）
 //	updatectl verify  -in latest.json -sig latest.json.sig -pub <base64 公钥>
 package main
@@ -33,6 +34,8 @@ func main() {
 		err = keygen(os.Args[2:])
 	case "manifest":
 		err = manifest(os.Args[2:])
+	case "notes":
+		err = notes(os.Args[2:])
 	case "sign":
 		err = sign(os.Args[2:])
 	case "verify":
@@ -47,7 +50,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "用法: updatectl keygen|manifest|sign|verify [参数]")
+	fmt.Fprintln(os.Stderr, "用法: updatectl keygen|manifest|notes|sign|verify [参数]")
 	os.Exit(2)
 }
 
@@ -99,6 +102,32 @@ func manifest(args []string) error {
 		return err
 	}
 	return os.WriteFile(*out, b, 0o644)
+}
+
+// notes 生成 GitHub Release 页面的正文：本版本的更新内容 + 升级方式 + 折叠的安装说明。
+// 变更记录里找不到该版本的小节时不失败（页面会写明没有更新说明），只在流水线里给出警告。
+func notes(args []string) error {
+	fs := flag.NewFlagSet("notes", flag.ExitOnError)
+	tag := fs.String("tag", "", "版本标签，如 v1.4.0")
+	cl := fs.String("changelog", "", "用于提取更新内容的 CHANGELOG（必须用脱敏版）")
+	out := fs.String("out", "notes.md", "输出文件")
+	fs.Parse(args)
+	if *tag == "" || *cl == "" {
+		return fmt.Errorf("需要 -tag 和 -changelog")
+	}
+	raw, err := os.ReadFile(*cl)
+	if err != nil {
+		return err
+	}
+	page, hasNotes := update.RenderReleasePage(*tag, string(raw))
+	if err := os.WriteFile(*out, []byte(page), 0o644); err != nil {
+		return err
+	}
+	if !hasNotes {
+		fmt.Printf("::warning::%s 的变更记录里没有 `## [%s]` 小节，Release 页面将写明没有更新说明；发版前应先在 CHANGELOG.md 里写好该版本的内容\n", *tag, strings.TrimPrefix(*tag, "v"))
+	}
+	fmt.Printf("已生成 %s（%d 字节，更新内容：%v）\n", *out, len(page), hasNotes)
+	return nil
 }
 
 func loadPriv() (ed25519.PrivateKey, error) {

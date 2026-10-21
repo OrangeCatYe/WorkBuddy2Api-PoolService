@@ -30,7 +30,7 @@
 - `GET /v1/models`：动态拉取上游目录，带上下文、最大输出、倍率、思考档位
 - `GET /status`、`GET /healthz`
 - 请求改写管线：`developer` 角色归一、tool_choice 归一、image_url 兼容、DeepSeek 思维链注入、`reasoning_effort` 降级、`reasoning_content` 回填、指纹脱敏、系统提示词三模式（custom / append / passthrough）与内容拦截降级重试
-- 响应：SSE 白名单重建、恰好一个 `[DONE]`、DSML 原生工具调用标记还原、错误帧附带网关提示
+- 渠道校验（业务码 11128）：网关按每条 system 消息的**开头**匹配「已知第三方 agent 提示」清单，命中即 400。处理分三层，都只动开头、不改宿主提示原文：① 出站前主动处理——命中已知开头（DeepSeek Harness 等）或本进程已学到的开头，在该消息最前面补一行中性的话，受脱敏开关约束；② 撞上拦截后（透传 / 追加模式）对每条 system 消息补中性开头行重试一次，不依赖清单是否过时，不占轮转名额，补完通过则把开头学下来（仅进程内存，重启清零）；③ 仍被拒才走既有的最小提示词降级。终局失败时 `gateway_hint` 回显第一次被拒时实际上线的 system 开头，并说明已重试过。判据只认响应 msg，不认上游的 displayTips（同码的另两道门提示语一字不差）- 响应：SSE 白名单重建、恰好一个 `[DONE]`、DSML 原生工具调用标记还原、错误帧附带网关提示
 - CN / Global 双域（`cn:` / `global:` 模型前缀）
 
 ### 2.2 账号池
@@ -117,6 +117,7 @@
 - F7.6 避免误报：不生成或执行脚本、不用 `%TEMP%`、不写注册表与启动项、必须用户点击才执行、Windows 二进制嵌入版本信息
 - F7.7 开机自启走发布包附带的脚本 / 模板，由用户主动安装；新增 `-background` 与无控制台时写日志文件
 - F7.8 更新相关的修改类接口要求 `admin_key` 非空；`/healthz` 增加 `version` 字段
+- F7.9 GitHub Release 页面以更新内容为主：由 `updatectl notes` 生成，顶部是本版本的更新内容（取自脱敏后变更记录里 `## [x.y.z]` 小节，与 `latest.json` 的更新说明同源），其后是升级方式，安装目录与旧版迁移说明折叠在后。变更记录里没有该版本小节时页面写明没有更新说明，流水线输出警告但不失败；因此发版前必须先把变更记录整理成该版本的小节
 
 ### 3.8 快速导入到其他 Agent（F8，v1.3.0）
 提案见 [proposals/2026-10-20-agent-import.md](proposals/2026-10-20-agent-import.md)，使用与各 Agent 格式见 [AGENT_IMPORT.md](AGENT_IMPORT.md)。
