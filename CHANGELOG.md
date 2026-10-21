@@ -4,6 +4,21 @@
 
 ## [未发布]
 
+## [1.4.0] - 2026-10-21
+
+### 新增
+- 渠道校验（业务码 11128）的 system 开头指纹处理（参考 dsh-connect-workbuddy v4.13.x 的实测）。国内版网关按每条 system 消息的开头匹配「已知第三方 agent 提示」清单，实测命中 `You are an AI agent powered by DeepSeek Harness`（国际版放行）与 Claude Code 的身份句，命中即 400 / 11128，换账号、换区域、改 UA 都没用。此前透传模式下 DeepSeek Harness 的请求会先被拒一次，再触发**全局**降级：把所有客户端的系统提示词都换成最小提示词，直到次日零点。现在分三层处理，都只在消息最前面补一行 `You are a helpful assistant.`、宿主提示原文一字不改：出站前主动处理（命中已知开头或本进程已学到的开头；受指纹脱敏开关约束，关闭即完全还原）；撞上拦截后对每条 system 消息补开头行重试一次（不依赖清单是否过时，不占轮转名额），通过则把这个开头学下来，之后同样开头的请求不再先撞一次；仍被拒才走既有的最小提示词降级。学习集合只在进程内存里，重启清零
+- 被渠道校验拒绝且无法修复时，响应的 `gateway_hint` 回显第一次被拒时实际上线的 system 开头（每条第一行、最多 3 条、每条截 120 字符），并说明网关已重试过、system 开头大概率不是原因；`custom` 模式不再建议切到 `custom`。`message` 仍是上游原文透传
+- 快速导入 Claude Code 时可以指定 Opus、Sonnet、Haiku 三个档位各用哪个模型，对应写入 `ANTHROPIC_DEFAULT_OPUS_MODEL`、`ANTHROPIC_DEFAULT_SONNET_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL`；没有单独指定的档位跟随主模型。接口 `POST /api/agents/claude-code/*` 请求体新增可选字段 `opus_model`、`sonnet_model`（`fast_model` 现在对应 Haiku 档）
+- Release 页面改为以更新内容为主：页面顶部是本版本的更新内容（取自变更记录里该版本的小节，与软件更新里显示的说明同源），其后是升级方式（已装 v1.2.0 及以上用「设置 → 软件更新」，更早版本手动替换），安装目录说明与旧版迁移说明折叠在后面。变更记录里没有该版本小节时页面会写明没有更新说明，流水线给出警告
+
+### 修复
+- 快速导入后 Claude Code 的 `/model opus`、`/model sonnet`、子代理和后台任务（会话标题等）仍会请求 Claude Code 内置的 Claude 模型 ID，网关里没有这些模型而返回 404。原因是此前只写了主模型和旧版的 `ANTHROPIC_SMALL_FAST_MODEL`，没有写三个档位别名。现在三个档位每次都显式写入，移除时逐项还原你原来自己配过的值；旧的 `ANTHROPIC_SMALL_FAST_MODEL` 与 Haiku 档同值，兼容旧版本 Claude Code。已导入的用户在卡片上点「更新」即可补上
+
+### 说明
+- 判据只认响应 `msg`（`unapproved channel` / `illegal api invocation`），不认上游的 `displayTips`：同码的另外两道门（缺 conversation id、首条消息不是 system）提示语一字不差。已知开头清单是实测快照，网关新增词条时会失效，由撞墙后的通用重试兜底；这两条开头来自参考仓库的实测，本项目未对真实网关复测
+- 既有的内容拦截降级重试多了一级：原样 → 补开头行 → 最小提示词，所以旧用例里「首次被拒就降级」的预期相应调整为「前两次被拒才降级」，降级本身的行为不变
+
 ## [1.3.3] - 2026-10-20
 
 ### 修复
