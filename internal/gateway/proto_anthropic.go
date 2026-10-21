@@ -21,14 +21,18 @@ func anthropicToChat(in map[string]any) (map[string]any, bool, error) {
 	out := map[string]any{"model": model}
 	var msgs []any
 
+	// 系统提示：顶层 system 在前，messages 里夹带的 system / developer 消息依次追加，合并成一条放在最前。
+	// 标准 Anthropic 协议不允许 messages 里出现 system 角色，但经中转、网关或部分客户端转发后很常见，
+	// 直接拒绝会让整个对话 400；而不少上游的对话模板又要求 system 必须在最前，所以统一提到开头。
+	var sysParts []string
 	switch s := in["system"].(type) {
 	case string:
-		if s != "" {
-			msgs = append(msgs, map[string]any{"role": "system", "content": s})
+		if strings.TrimSpace(s) != "" {
+			sysParts = append(sysParts, s)
 		}
 	case []any:
 		if t := joinTextBlocks(s); t != "" {
-			msgs = append(msgs, map[string]any{"role": "system", "content": t})
+			sysParts = append(sysParts, t)
 		}
 	}
 
@@ -42,11 +46,23 @@ func anthropicToChat(in map[string]any) (map[string]any, bool, error) {
 			continue
 		}
 		role, _ := m["role"].(string)
+		if role == "system" || role == "developer" {
+			if t := systemContentText(m["content"]); t != "" {
+				sysParts = append(sysParts, t)
+			}
+			continue
+		}
 		conv, err := anthropicMessage(role, m["content"])
 		if err != nil {
 			return nil, false, err
 		}
 		msgs = append(msgs, conv...)
+	}
+	if len(msgs) == 0 {
+		return nil, false, errors.New("field 'messages' needs at least one user or assistant message")
+	}
+	if len(sysParts) > 0 {
+		msgs = append([]any{map[string]any{"role": "system", "content": strings.Join(sysParts, "\n\n")}}, msgs...)
 	}
 	out["messages"] = msgs
 
@@ -158,6 +174,16 @@ func copyNum(in, out map[string]any, from, to string) {
 	}
 }
 
+// systemContentText 取出 system / developer 消息的文本：content 可能是字符串，也可能是文本块数组。
+func systemContentText(content any) string {
+	switch c := content.(type) {
+	case string:
+		return strings.TrimSpace(c)
+	case []any:
+		return strings.TrimSpace(joinTextBlocks(c))
+	}
+	return ""
+}
 func joinTextBlocks(blocks []any) string {
 	var parts []string
 	for _, rb := range blocks {

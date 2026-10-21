@@ -70,6 +70,63 @@ func TestAnthropicToChat(t *testing.T) {
 	}
 }
 
+// 经中转 / 网关转发后，messages 里常带 system、developer 角色（标准协议不允许，但不能因此整个请求 400）。
+func TestAnthropicToChatAcceptsSystemRoleInMessages(t *testing.T) {
+	roles := func(out map[string]any) string {
+		var rs []string
+		for _, m := range out["messages"].([]any) {
+			rs = append(rs, m.(map[string]any)["role"].(string))
+		}
+		return strings.Join(rs, ",")
+	}
+	sysText := func(out map[string]any) string {
+		return out["messages"].([]any)[0].(map[string]any)["content"].(string)
+	}
+
+	// 只有 messages 里的 system：提到最前。
+	out, _, err := anthropicToChat(decode(t, `{"model":"m","messages":[
+	  {"role":"system","content":"be brief"},
+	  {"role":"user","content":"hi"}]}`))
+	if err != nil {
+		t.Fatalf("messages 里的 system 角色不应报错: %v", err)
+	}
+	if roles(out) != "system,user" || sysText(out) != "be brief" {
+		t.Fatalf("roles=%s sys=%q", roles(out), sysText(out))
+	}
+
+	// 顶层 system + messages 里的 system / developer：合并成一条，顶层在前；文本块数组也认。
+	out, _, err = anthropicToChat(decode(t, `{"model":"m","system":"top","messages":[
+	  {"role":"user","content":"hi"},
+	  {"role":"system","content":[{"type":"text","text":"mid-1"},{"type":"text","text":"mid-2"}]},
+	  {"role":"assistant","content":"ok"},
+	  {"role":"developer","content":"dev"},
+	  {"role":"user","content":"again"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if roles(out) != "system,user,assistant,user" {
+		t.Fatalf("system 应合并并置于最前，其余顺序不变: %s", roles(out))
+	}
+	if got := sysText(out); got != "top\n\nmid-1\n\nmid-2\n\ndev" {
+		t.Fatalf("合并后的 system = %q", got)
+	}
+
+	// 空的 system 消息不产生空的 system 条目。
+	out, _, err = anthropicToChat(decode(t, `{"model":"m","messages":[
+	  {"role":"system","content":"  "},{"role":"system","content":[]},{"role":"user","content":"hi"}]}`))
+	if err != nil || roles(out) != "user" {
+		t.Fatalf("空 system 应被忽略: err=%v roles=%v", err, out["messages"])
+	}
+
+	// 只有 system、没有任何对话内容：仍然要报错，而不是发一个只有 system 的请求给上游。
+	if _, _, err = anthropicToChat(decode(t, `{"model":"m","messages":[{"role":"system","content":"x"}]}`)); err == nil {
+		t.Fatal("没有 user / assistant 消息应报错")
+	}
+	// 真正未知的角色仍然拒绝。
+	if _, _, err = anthropicToChat(decode(t, `{"model":"m","messages":[{"role":"robot","content":"x"},{"role":"user","content":"y"}]}`)); err == nil {
+		t.Fatal("未知角色应继续拒绝")
+	}
+}
 func TestResponsesToChat(t *testing.T) {
 	in := decode(t, `{
 	  "model":"gpt-x","instructions":"be brief","reasoning":{"effort":"high"},"max_output_tokens":500,
@@ -305,6 +362,23 @@ func TestMessagesEndToEnd(t *testing.T) {
 	}
 }
 
+// 端到端：Claude 经中转发来的请求，messages 里带 system 角色，网关应正常应答（此前返回 400 unsupported role "system"）。
+func TestMessagesAcceptsSystemRoleEndToEnd(t *testing.T) {
+	mux, _, _ := newStoreGateway(t)
+	hdr := map[string]string{"x-api-key": "k", "anthropic-version": "2023-06-01"}
+	for _, role := range []string{"system", "developer"} {
+		body := `{"model":"mock-think","max_tokens":100,"messages":[{"role":"` + role + `","content":"you are a bot"},{"role":"user","content":"hello"}]}`
+		rec := do(mux, "/v1/messages", body, hdr)
+		if m := decode(t, rec.Body.String()); rec.Code != 200 || m["type"] != "message" {
+			t.Fatalf("role=%s: %d %s", role, rec.Code, rec.Body.String())
+		}
+		rec = do(mux, "/v1/messages", strings.Replace(body, `"max_tokens":100`, `"max_tokens":100,"stream":true`, 1), hdr)
+		names, _ := sseEvents(rec.Body.String())
+		if rec.Code != 200 || len(names) == 0 || names[0] != "message_start" {
+			t.Fatalf("role=%s stream: %d %s", role, rec.Code, rec.Body.String())
+		}
+	}
+}
 func TestKeyLimits(t *testing.T) {
 	mux, ks, _ := newStoreGateway(t)
 	k, err := ks.Create(keys.Spec{Name: "ci", Models: []string{"mock-echo"}, RPM: 2}, "")
